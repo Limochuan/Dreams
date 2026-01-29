@@ -1,0 +1,3 @@
+git add backend/uploads/.gitkeep
+git commit -m "Add .gitkeep to track uploads directory"
+git push
