@@ -236,3 +236,75 @@ async def ws_chat(
         pass
     finally:
         ws_manager.leave(conversation_id, ws)
+
+# ... (保持前面的代码不变) ...
+
+# =========================
+# ✨ 新增：用户资料与好友 API
+# =========================
+
+@app.get("/api/users/{target_uid}/profile")
+def api_get_user_profile(target_uid: int, token: str):
+    try:
+        my_uid = require_uid_from_token(token)
+        
+        conn = get_conn()
+        try:
+            with conn.cursor() as cur:
+                # 1. 查询目标用户信息
+                cur.execute(
+                    "SELECT id, username, avatar, gender, created_at FROM dreams_users WHERE id=%s",
+                    (target_uid,)
+                )
+                user = cur.fetchone()
+                if not user:
+                    return JSONResponse({"error": "User not found"}, status_code=404)
+                
+                # 2. 查询是否已经是好友
+                cur.execute(
+                    "SELECT 1 FROM dreams_friends WHERE uid=%s AND friend_uid=%s",
+                    (my_uid, target_uid)
+                )
+                is_friend = cur.fetchone() is not None
+
+                # 3. 格式化注册时间
+                created_at_str = user["created_at"].strftime("%Y-%m-%d") if user["created_at"] else "未知"
+
+                return {
+                    "uid": user["id"],
+                    "username": user["username"],
+                    "avatar": user["avatar"],
+                    "gender": user["gender"],
+                    "created_at": created_at_str,
+                    "is_friend": is_friend,
+                    "is_me": (my_uid == target_uid) # 标记是不是我自己
+                }
+        finally:
+            conn.close()
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.post("/api/friends/add")
+def api_add_friend(payload: dict):
+    try:
+        uid = require_uid_from_token(payload.get("token", ""))
+        friend_uid = int(payload.get("friend_uid"))
+
+        if uid == friend_uid:
+            return JSONResponse({"error": "不能添加自己为好友"}, status_code=400)
+
+        conn = get_conn()
+        try:
+            with conn.cursor() as cur:
+                # 双向添加好友 (你加他，他也加你)
+                cur.execute(
+                    "INSERT IGNORE INTO dreams_friends (uid, friend_uid) VALUES (%s, %s), (%s, %s)",
+                    (uid, friend_uid, friend_uid, uid)
+                )
+                conn.commit()
+            return {"ok": True}
+        finally:
+            conn.close()
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
