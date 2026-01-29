@@ -1,5 +1,5 @@
-import pymysql
 import os
+import pymysql
 
 def get_conn():
     return pymysql.connect(
@@ -7,6 +7,7 @@ def get_conn():
         user=os.getenv("DB_USER"),
         password=os.getenv("DB_PASSWORD"),
         database=os.getenv("DB_NAME"),
+        port=int(os.getenv("DB_PORT", 3306)),
         charset="utf8mb4",
         cursorclass=pymysql.cursors.DictCursor,
         autocommit=True
