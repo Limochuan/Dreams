@@ -47,7 +47,7 @@ def save_avatar_file(uid: int, base64_str: str) -> Optional[str]:
         elif "gif" in header:
             ext = ".gif"
 
-        # 3. 确定保存目录 (确保和 main.py 里的 UPLOAD_DIR 对应)
+        # 3. 确定保存目录
         current_dir = os.path.dirname(os.path.abspath(__file__))
         uploads_dir = os.path.join(current_dir, "uploads")
         if not os.path.exists(uploads_dir):
@@ -100,19 +100,19 @@ def get_user_by_id(uid: int) -> Optional[Dict]:
 
 
 # =========================
-# 用户创建
+# 用户创建 (含 Gender)
 # =========================
 
-def create_user(username: str, password: str, avatar: Optional[str]) -> int:
+def create_user(username: str, password: str, avatar: Optional[str], gender: str = 'secret') -> int:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO dreams_users (username, password_hash, avatar)
-                VALUES (%s, %s, %s)
+                INSERT INTO dreams_users (username, password_hash, avatar, gender)
+                VALUES (%s, %s, %s, %s)
                 """,
-                (username, _hash_password(password), avatar),
+                (username, _hash_password(password), avatar, gender),
             )
             conn.commit()
             return cur.lastrowid
@@ -164,10 +164,10 @@ def get_uid_by_token(token: str) -> Optional[int]:
 # 对外接口：注册 / 登录
 # =========================
 
-def register(username: str, password: str, avatar: Optional[str]) -> Dict:
+def register(username: str, password: str, avatar: Optional[str], gender: str = 'secret') -> Dict:
     """
     注册流程：
-    1. 校验 -> 2. 建用户(avatar暂空) -> 3. 存图片 -> 4. 更新URL -> 5. 发Token -> 6. 加群
+    1. 校验 -> 2. 建用户(带Gender) -> 3. 存图片 -> 4. 更新URL -> 5. 发Token -> 6. 加群
     """
     if not username or not password:
         raise ValueError("username and password required")
@@ -176,16 +176,14 @@ def register(username: str, password: str, avatar: Optional[str]) -> Dict:
     if existing:
         raise ValueError("username already exists")
 
-    # 1. 先创建用户，此时 avatar 传 None，因为我们还没生成 URL
-    uid = create_user(username, password, None)
+    # 1. 创建用户
+    uid = create_user(username, password, None, gender)
     
     avatar_url = None
     
-    # 2. 如果前端传了 Base64 图片，进行保存
+    # 2. 保存头像
     if avatar:
         avatar_url = save_avatar_file(uid, avatar)
-        
-        # 如果保存成功，更新数据库里的 avatar 字段为 URL
         if avatar_url:
             conn = get_conn()
             try:
@@ -211,7 +209,8 @@ def register(username: str, password: str, avatar: Optional[str]) -> Dict:
     return {
         "uid": uid,
         "token": token,
-        "avatar": avatar_url
+        "avatar": avatar_url,
+        "gender": gender
     }
 
 
