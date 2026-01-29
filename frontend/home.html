@@ -50,13 +50,18 @@
     .header-icons { display: flex; gap: 20px; color: #333; font-size: 18px; cursor: pointer; }
     .messages-box { flex: 1; overflow-y: auto; padding: 20px 30px; display: flex; flex-direction: column; gap: 20px; }
     
-    .msg-row { display: flex; align-items: flex-start; gap: 12px; } .msg-row.me { flex-direction: row-reverse; }
+    /* 消息气泡修复：防止拉伸，增加最大宽度 */
+    .msg-row { display: flex; align-items: flex-start; gap: 12px; }
+    .msg-row.me { flex-direction: row-reverse; }
+    .msg-bubble-wrap { max-width: 60%; display: flex; flex-direction: column; align-items: flex-start; } /* 默认左对齐 */
+    .msg-row.me .msg-bubble-wrap { align-items: flex-end; } /* 自己发的右对齐 */
+    
     .msg-avatar { width: 36px; height: 36px; border-radius: 50%; cursor: pointer; }
     .bubble { padding: 10px 14px; background: #fff; border-radius: 10px; font-size: 14px; line-height: 1.6; color: #000; box-shadow: 0 1px 2px rgba(0,0,0,0.05); word-break: break-word; }
     .msg-row.me .bubble { background: #0099ff; color: #fff; border-top-right-radius: 2px; } .msg-row:not(.me) .bubble { border-top-left-radius: 2px; }
     .bubble img { max-width: 200px; border-radius: 4px; cursor: pointer; }
     
-    /* ✨ 修复按键错位的关键 CSS ✨ */
+    /* ✨✨✨ 修复按键错位的关键 CSS ✨✨✨ */
     .input-box { height: 170px; border-top: 1px solid #e7e7e7; background: #fff; display: flex; flex-direction: column; }
     .toolbar { 
         padding: 10px 20px; 
@@ -64,7 +69,7 @@
         gap: 20px; 
         color: #666; 
         font-size: 20px; 
-        align-items: center; /* 垂直居中，防止错位 */
+        align-items: center; /* 关键：垂直居中对齐 */
     }
     .tool-icon { cursor: pointer; transition: color 0.2s; } 
     .tool-icon:hover { color: #0099ff; }
@@ -356,7 +361,6 @@
         }
     }
 
-    // 右键翻译支持
     function showCtxMenu(e, c) { 
         e.preventDefault(); ctxCid=c.id; 
         const m=document.getElementById("ctxMenu"); m.style.display='block'; m.style.left=e.pageX+'px'; m.style.top=e.pageY+'px'; 
@@ -376,6 +380,14 @@
 
     async function addGroupMember() { if(currentCid){ const u=prompt(translations[curLang].input_uid); if(u)Dreams.apiPost(`/api/conversations/${currentCid}/members`,{new_uid:u}).then(r=>{if(r.error)alert(r.error);else loadMembers(currentCid)}); } }
     
+    // ✨✨ 内置图片转Base64工具，防止依赖缺失
+    const fileToBase64 = (file) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+    });
+
     // 通用函数
     function appendMessage(msg) {
         const box = document.getElementById("msgBox"); const isMe = (me && msg.sender_uid === me.uid);
@@ -387,7 +399,17 @@
         box.appendChild(div); box.scrollTop = box.scrollHeight;
     }
     function downloadImg(src) { const a = document.createElement('a'); a.href=src; a.download='img.png'; a.click(); }
-    async function sendImage(input) { if(!ws||!input.files[0])return; const b64=await Dreams.fileToBase64(input.files[0]); ws.send(JSON.stringify({content:`[image]${b64}`})); input.value=""; }
+    
+    async function sendImage(input) { 
+        if(!ws||!input.files[0])return; 
+        // 优先尝试 Dreams.fileToBase64，如果不存在则使用本地 helper
+        let b64;
+        try { b64 = await Dreams.fileToBase64(input.files[0]); }
+        catch { b64 = await fileToBase64(input.files[0]); }
+        
+        ws.send(JSON.stringify({content:`[image]${b64}`})); input.value=""; 
+    }
+    
     function sendMsg() { const i=document.getElementById("msgInput"); const v=i.value.trim(); if(!v||!ws)return; ws.send(JSON.stringify({content:v})); i.value=""; }
     async function showProfile(uid) {
         const res = await Dreams.apiGet(`/api/users/${uid}/profile`);
