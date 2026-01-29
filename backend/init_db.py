@@ -4,14 +4,8 @@ from db import get_conn
 # =========================
 # 数据库初始化 DDL 列表
 # =========================
-# 说明：
-# - 这里集中定义所有 Dreams 项目需要的表结构
-# - 使用 CREATE TABLE IF NOT EXISTS，只负责“首次创建”
-# - 已存在的表不会被修改
-# - 表结构变更需要通过手动 ALTER TABLE 完成
-
+# (这部分 DDL 定义保持不变，完全正确)
 DDL = [
-
     # 用户表
     """
     CREATE TABLE IF NOT EXISTS dreams_users (
@@ -70,6 +64,8 @@ DDL = [
             FOREIGN KEY (conversation_id)
             REFERENCES dreams_conversations(id)
             ON DELETE CASCADE,
+            # 注意：这里我们保留了级联删除，
+            # 如果删除了世界频道，所有人都会退群，逻辑是自洽的
         CONSTRAINT fk_mem_user
             FOREIGN KEY (uid)
             REFERENCES dreams_users(id)
@@ -105,21 +101,35 @@ DDL = [
 
 def init_db():
     """
-    初始化 Dreams 项目的数据库表结构
-
-    行为说明：
-    - 依次执行 DDL 列表中的建表语句
-    - 只负责创建不存在的表
-    - 不负责字段变更、不做数据迁移
-
-    使用建议：
-    - 首次部署时手动调用一次
-    - 不建议在应用启动时自动调用
+    初始化 Dreams 项目的数据库表结构并预制种子数据
     """
     conn = get_conn()
     try:
         with conn.cursor() as cur:
+            # 1. 执行建表
             for sql in DDL:
                 cur.execute(sql)
+            
+            # 2. 【关键新增】预制“世界频道”
+            # 使用 INSERT IGNORE，防止每次重启时重复插入或报错
+            # 我们手动指定 id=1，确保它永远是第 1 号会话
+            cur.execute(
+                """
+                INSERT IGNORE INTO dreams_conversations (id, type, title) 
+                VALUES (1, 'group', '🌍 世界频道')
+                """
+            )
+            
+            # 这里的 conn 在 db.py 里已经开启了 autocommit=True，
+            # 所以不需要手动 commit
+            print("Database initialized successfully (World Channel created).")
+
+    except Exception as e:
+        print(f"Database init failed: {e}")
+        raise e  # 抛出异常让程序知道初始化失败了
     finally:
         conn.close()
+
+if __name__ == "__main__":
+    # 允许直接运行此文件来初始化
+    init_db()
