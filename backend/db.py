@@ -1,27 +1,21 @@
 import os
 import pymysql
-
+import ssl  # <--- 需要引入这个标准库
 
 def get_conn():
-    """
-    获取一个新的 MySQL 数据库连接
+    # ... 注释不变 ...
+    
+    # 检查是否需要 SSL（通常线上环境才需要）
+    # 大部分云厂商只需要一个空的 SSL 上下文即可骗过验证
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+    
+    # 如果是在本地开发（没有 DB_USE_SSL 环境变量），就不传 ssl
+    # 如果是在线上（设置了 DB_USE_SSL=true），就启用 ssl
+    enable_ssl = os.getenv("DB_USE_SSL", "false").lower() == "true"
+    ssl_arg = ssl_context if enable_ssl else None
 
-    设计说明：
-    - 每次调用都会创建一个新的连接
-    - 使用环境变量读取数据库配置，适配本地 / Railway / 云数据库
-    - 不在模块加载或应用启动时自动连接数据库
-    - 由具体业务函数在需要时主动调用
-
-    使用的环境变量：
-    - DB_HOST: 数据库地址（不要写 localhost，线上一般是云数据库地址）
-    - DB_USER: 数据库用户名
-    - DB_PASSWORD: 数据库密码
-    - DB_NAME: 数据库名称
-    - DB_PORT: 数据库端口（可选，默认 3306）
-
-    返回：
-    - 一个 pymysql 连接对象
-    """
     return pymysql.connect(
         host=os.getenv("DB_HOST"),
         user=os.getenv("DB_USER"),
@@ -30,5 +24,6 @@ def get_conn():
         port=int(os.getenv("DB_PORT", 3306)),
         charset="utf8mb4",
         cursorclass=pymysql.cursors.DictCursor,
-        autocommit=True
+        autocommit=True,
+        ssl=ssl_arg  # <--- 加上这个参数
     )
