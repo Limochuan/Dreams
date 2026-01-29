@@ -1,9 +1,8 @@
+import os
 import json
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
-
 
 from init_db import init_db
 from auth import (
@@ -28,26 +27,6 @@ from ws import ws_manager, detect_device
 # =========================
 
 app = FastAPI(title="Dreams Backend")
-# =========================
-# 前端静态文件挂载
-# =========================
-
-# frontend 目录结构：
-# frontend/
-#   ├─ login.html
-#   ├─ conversations.html
-#   ├─ chat.html
-#   └─ app.js
-
-app.mount(
-    "/",
-    StaticFiles(directory="frontend", html=True),
-    name="frontend"
-)
-
-@app.get("/")
-async def root():
-    return RedirectResponse(url="/login.html")
 
 
 # =========================
@@ -343,3 +322,34 @@ async def ws_chat(ws: WebSocket, conversation_id: int):
                 })
         except Exception:
             pass
+
+
+# =========================
+# 前端静态文件挂载
+# =========================
+# 你的目录结构是：
+# /
+#   backend/main.py
+#   frontend/login.html
+# 所以前端真实路径是：backend 的上一级目录里的 frontend
+# 必须用绝对路径计算，不能写 directory="frontend"，否则会去找 backend/frontend
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FRONTEND_DIR = os.path.join(BASE_DIR, "..", "frontend")
+
+
+@app.get("/")
+async def root():
+    """
+    访问根路径时，直接跳转到登录页面
+    """
+    return RedirectResponse(url="/login.html")
+
+
+# 挂载前端目录到根路径
+# 这段必须放在文件最后，避免覆盖 /api 和 /ws 路由
+app.mount(
+    "/",
+    StaticFiles(directory=FRONTEND_DIR, html=True),
+    name="frontend"
+)
