@@ -1,5 +1,6 @@
 from typing import List, Dict, Optional
 from db import get_conn
+import pymysql # 引入这个是为了捕获具体的数据库错误
 
 # ================= 1. 基础创建 =================
 
@@ -39,14 +40,12 @@ def create_group(owner_uid: int, title: str) -> int:
     finally:
         conn.close()
 
-# ================= 2. 列表查询 (核心修复) =================
+# ================= 2. 列表查询 =================
 
 def list_conversations(uid: int) -> List[Dict]:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            # 💡 核心修复：
-            # 在 JOIN 时更严格地筛选 m_peer.uid != uid，确保查出的 peer_name 绝对不是自己
             sql = """
             SELECT 
                 c.id, c.type, c.title, c.avatar as group_avatar, c.updated_at,
@@ -64,7 +63,6 @@ def list_conversations(uid: int) -> List[Dict]:
                  WHERE msg.conversation_id = c.id ORDER BY msg.created_at DESC LIMIT 1
                 ) as last_message_time,
 
-                -- 对方的信息
                 u_peer.username as peer_name,
                 u_peer.avatar as peer_avatar,
                 u_peer.id as peer_uid
@@ -72,19 +70,16 @@ def list_conversations(uid: int) -> List[Dict]:
             FROM dreams_conversation_members m
             JOIN dreams_conversations c ON m.conversation_id = c.id
             
-            -- 尝试查找私聊的“另一方”
-            -- 条件：同会话ID + 类型是private + 用户ID不等于我自己
             LEFT JOIN dreams_conversation_members m_peer 
                 ON c.id = m_peer.conversation_id 
                 AND c.type = 'private' 
-                AND m_peer.uid != %s  -- 这里直接用参数排除自己
+                AND m_peer.uid != %s
                 
             LEFT JOIN dreams_users u_peer ON m_peer.uid = u_peer.id
             
             WHERE m.uid = %s
             ORDER BY m.is_pinned DESC, COALESCE(last_message_time, c.updated_at) DESC
             """
-            # 注意：这里传了两次 uid，一次给 JOIN 里的排除条件，一次给 WHERE
             cur.execute(sql, (uid, uid))
             rows = cur.fetchall()
             
@@ -93,9 +88,7 @@ def list_conversations(uid: int) -> List[Dict]:
                 display_title = r["title"]
                 display_avatar = r["group_avatar"]
                 
-                # 如果是私聊，强制使用对方的名字和头像
                 if r["type"] == 'private':
-                    # 如果 peer_name 查出来是空，说明数据可能异常，或者对方注销了
                     display_title = r["peer_name"] or "未知用户"
                     display_avatar = r["peer_avatar"]
                 
@@ -163,8 +156,17 @@ def add_member(operator_uid: int, cid: int, new_uid: int):
                 row = cur.fetchone()
                 if not row: pass 
 
-            cur.execute("INSERT IGNORE INTO dreams_conversation_members (conversation_id, uid) VALUES (%s, %s)", (cid, new_uid))
-            conn.commit()
+            # ✨ 修复：不再使用 IGNORE，确保数据写入，并强制转 int 防止类型错误
+            try:
+                cur.execute("INSERT INTO dreams_conversation_members (conversation_id, uid) VALUES (%s, %s)", (cid, int(new_uid)))
+                conn.commit()
+            except pymysql.err.IntegrityError:
+                # 如果已经存在，直接忽略，不报错（相当于 IGNORE，但更可控）
+                pass
+            except Exception as e:
+                # 其他错误则抛出
+                print(f"Add member failed: {e}")
+                raise e
     finally:
         conn.close()
 
