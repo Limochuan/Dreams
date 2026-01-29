@@ -32,21 +32,32 @@ app = FastAPI(title="Dreams Backend")
 # =========================
 # 数据库初始化
 # =========================
-# 启动时检查表是否存在，并确保世界频道存在
 init_db()
 
 
 # =========================
-# 静态前端目录
+# 📂 静态资源与上传目录 (核心修改)
 # =========================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# 假设前端在 backend 的上一级目录的 frontend 文件夹中
+
+# 1. 配置上传目录 (用来存图片)
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+if not os.path.exists(UPLOAD_DIR):
+    os.makedirs(UPLOAD_DIR)
+
+# 2. 配置前端目录
 FRONTEND_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "frontend"))
 
-if not os.path.exists(FRONTEND_DIR):
-    print(f"Warning: Frontend directory not found at {FRONTEND_DIR}")
+# 3. 挂载上传目录：让 /uploads/xxx.png 可以被访问
+app.mount(
+    "/uploads",
+    StaticFiles(directory=UPLOAD_DIR),
+    name="uploads"
+)
 
+# 4. 挂载前端页面 (注意：/static 要放在最后或者非根路径，但在 heavy logic 中挂载根路径要小心覆盖 API)
+# 这里我们把前端挂载到 /static，根路径做跳转
 app.mount(
     "/static",
     StaticFiles(directory=FRONTEND_DIR),
@@ -75,16 +86,17 @@ def require_uid_from_token(token: str) -> int:
 
 
 # =========================
-# Auth API (注意：去掉了 async)
+# Auth API
 # =========================
 
 @app.post("/api/register")
 def api_register(payload: dict):
     try:
+        # 这里 reg_user 内部逻辑已经修改为保存文件了
         return reg_user(
             username=payload.get("username", "").strip(),
             password=payload.get("password", ""),
-            avatar=payload.get("avatar"),
+            avatar=payload.get("avatar"), # 传入 Base64
         )
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -111,14 +123,14 @@ def api_me(token: str):
         return {
             "uid": user["id"],
             "username": user["username"],
-            "avatar": user.get("avatar"),
+            "avatar": user.get("avatar"), # 这里返回的已经是 URL 了
         }
     except PermissionError as e:
         return JSONResponse({"error": str(e)}, status_code=401)
 
 
 # =========================
-# Conversations API (注意：去掉了 async)
+# Conversations API
 # =========================
 
 @app.get("/api/conversations")
@@ -164,7 +176,7 @@ def api_add_member(conversation_id: int, payload: dict):
 
 
 # =========================
-# Messages API (注意：去掉了 async)
+# Messages API
 # =========================
 
 @app.get("/api/conversations/{conversation_id}/messages")
@@ -179,33 +191,24 @@ def api_list_messages(conversation_id: int, token: str, limit: int = 50):
 
 
 # =========================
-# WebSocket (核心：保持 async，并加上了握手验证)
+# WebSocket
 # =========================
 
 @app.websocket("/ws/{conversation_id}")
 async def ws_chat(
     ws: WebSocket, 
     conversation_id: int,
-    token: str = Query(...)  # ✅ 从 URL 参数中获取 token
+    token: str = Query(...) 
 ):
-    # 1. 握手前验证：如果 token 无效，直接拒绝连接
     uid = get_uid_by_token(token)
     
-    # 因为 is_member 内部查库是同步的，为了不阻塞 WS 握手，
-    # 严格来说这里应该在线程池跑，但为了简化代码，
-    # 且 is_member 查询非常快，这里直接调用影响不大。
-    # 如果追求极致性能，可以用 run_in_executor。
     if not uid or not is_member(uid, conversation_id):
         await ws.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    # 2. 验证通过，建立连接
     await ws.accept()
-    
-    # 3. 加入管理器
     await ws_manager.join(conversation_id, ws, uid)
 
-    # 4. 广播“加入房间”事件
     await ws_manager.broadcast(conversation_id, {
         "type": "system",
         "event": "join",
@@ -215,10 +218,7 @@ async def ws_chat(
 
     try:
         while True:
-            # 等待接收消息
             data = await ws.receive_text()
-            
-            # 尝试解析 JSON
             try:
                 frame = json.loads(data)
                 content = (frame.get("content") or "").strip()
@@ -228,12 +228,8 @@ async def ws_chat(
             if not content:
                 continue
 
-            # 5. 保存消息到数据库 (注意：这里在 async 里调同步 DB 函数)
-            # 虽然 save_message 是同步的，但对聊天体验影响在毫秒级，Demo 可接受
-            # 完美做法是: await loop.run_in_executor(None, save_message, ...)
             save_message(conversation_id, uid, content)
 
-            # 6. 广播消息
             await ws_manager.broadcast(conversation_id, {
                 "type": "message",
                 "conversation_id": conversation_id,
@@ -245,5 +241,4 @@ async def ws_chat(
     except WebSocketDisconnect:
         pass
     finally:
-        # 7. 断开清理
         ws_manager.leave(conversation_id, ws)
