@@ -39,14 +39,14 @@ def create_group(owner_uid: int, title: str) -> int:
     finally:
         conn.close()
 
-# ================= 2. 列表查询 (核心) =================
+# ================= 2. 列表查询 (核心修复) =================
 
 def list_conversations(uid: int) -> List[Dict]:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            # 联合查询：获取群信息、我的角色、未读数、最后一条消息、私聊对方信息
-            # [关键点] 这里查询了 c.avatar 和 m.is_pinned，如果数据库没更新会报错
+            # 💡 核心修复：
+            # 在 JOIN 时更严格地筛选 m_peer.uid != uid，确保查出的 peer_name 绝对不是自己
             sql = """
             SELECT 
                 c.id, c.type, c.title, c.avatar as group_avatar, c.updated_at,
@@ -64,36 +64,46 @@ def list_conversations(uid: int) -> List[Dict]:
                  WHERE msg.conversation_id = c.id ORDER BY msg.created_at DESC LIMIT 1
                 ) as last_message_time,
 
+                -- 对方的信息
                 u_peer.username as peer_name,
                 u_peer.avatar as peer_avatar,
                 u_peer.id as peer_uid
 
             FROM dreams_conversation_members m
             JOIN dreams_conversations c ON m.conversation_id = c.id
+            
+            -- 尝试查找私聊的“另一方”
+            -- 条件：同会话ID + 类型是private + 用户ID不等于我自己
             LEFT JOIN dreams_conversation_members m_peer 
-                ON c.id = m_peer.conversation_id AND c.type = 'private' AND m_peer.uid != m.uid
+                ON c.id = m_peer.conversation_id 
+                AND c.type = 'private' 
+                AND m_peer.uid != %s  -- 这里直接用参数排除自己
+                
             LEFT JOIN dreams_users u_peer ON m_peer.uid = u_peer.id
             
             WHERE m.uid = %s
             ORDER BY m.is_pinned DESC, COALESCE(last_message_time, c.updated_at) DESC
             """
-            cur.execute(sql, (uid,))
+            # 注意：这里传了两次 uid，一次给 JOIN 里的排除条件，一次给 WHERE
+            cur.execute(sql, (uid, uid))
             rows = cur.fetchall()
             
             results = []
             for r in rows:
-                title = r["title"]
-                avatar = r["group_avatar"]
-                # 如果是私聊，用对方的名字和头像覆盖
+                display_title = r["title"]
+                display_avatar = r["group_avatar"]
+                
+                # 如果是私聊，强制使用对方的名字和头像
                 if r["type"] == 'private':
-                    title = r["peer_name"] or "未知用户"
-                    avatar = r["peer_avatar"]
+                    # 如果 peer_name 查出来是空，说明数据可能异常，或者对方注销了
+                    display_title = r["peer_name"] or "未知用户"
+                    display_avatar = r["peer_avatar"]
                 
                 results.append({
                     "id": r["id"], 
                     "type": r["type"], 
-                    "title": title, 
-                    "avatar": avatar,
+                    "title": display_title, 
+                    "avatar": display_avatar,
                     "peer_uid": r["peer_uid"], 
                     "is_pinned": bool(r["is_pinned"]), 
                     "is_muted": bool(r["is_muted"]),
@@ -106,14 +116,12 @@ def list_conversations(uid: int) -> List[Dict]:
     finally:
         conn.close()
 
-# ================= 3. 管理功能 (你之前缺失的部分) =================
+# ================= 3. 管理功能 =================
 
-# 更新群信息 (改名/改头像)
 def update_group_info(operator_uid: int, cid: int, title: str = None, avatar: str = None):
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            # 鉴权
             cur.execute("SELECT role FROM dreams_conversation_members WHERE conversation_id=%s AND uid=%s", (cid, operator_uid))
             row = cur.fetchone()
             if not row or row["role"] != 'owner':
@@ -125,7 +133,6 @@ def update_group_info(operator_uid: int, cid: int, title: str = None, avatar: st
     finally:
         conn.close()
 
-# 移除成员 (踢人)
 def remove_member(operator_uid: int, cid: int, target_uid: int):
     conn = get_conn()
     try:
@@ -147,12 +154,10 @@ def remove_member(operator_uid: int, cid: int, target_uid: int):
     finally:
         conn.close()
 
-# 添加成员 (拉人)
 def add_member(operator_uid: int, cid: int, new_uid: int):
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            # ID=1 世界频道允许自动加入
             if cid != 1:
                 cur.execute("SELECT role FROM dreams_conversation_members WHERE conversation_id=%s AND uid=%s", (cid, operator_uid))
                 row = cur.fetchone()
