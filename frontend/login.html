@@ -3,252 +3,98 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Dreams - Login</title>
-
+  <title>登录 - Dreams</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      background: #f4f4f4;
-      padding: 20px;
+      margin: 0; padding: 0;
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      height: 100vh; display: flex; align-items: center; justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     }
-
     .card {
-      background: #fff;
-      border: 1px solid #ddd;
-      border-radius: 12px;
-      padding: 16px;
-      max-width: 420px;
-      margin: 0 auto;
-      /* 防止卡片本身在小屏幕上溢出 */
-      box-sizing: border-box; 
-    }
-
-    input {
-      width: 100%;
-      padding: 10px;
-      margin: 8px 0;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      /* ✨ 核心修复：确保宽度包含 padding 和 border */
-      box-sizing: border-box; 
-    }
-
-    /* 专门优化一下文件上传框的样式 */
-    input[type="file"] {
-        padding: 6px;
-        background: #fafafa;
-    }
-
-    button {
-      padding: 10px 12px;
-      border: 0;
-      border-radius: 8px;
-      cursor: pointer;
-      width: 100%;
-      background-color: #007bff;
-      color: white;
-      font-size: 16px;
-      transition: background 0.2s;
-    }
-    
-    button:hover {
-        background-color: #0056b3;
-    }
-
-    /* 禁用状态（加载中） */
-    button:disabled {
-        background-color: #ccc;
-        cursor: not-allowed;
-    }
-
-    .row {
-      display: flex;
-      gap: 10px;
-      margin-top: 10px;
-    }
-
-    .row button {
-      width: 50%;
-    }
-    
-    /* 让注册按钮颜色淡一点，区分主次 */
-    .row button:last-child {
-        background-color: #6c757d;
-    }
-    .row button:last-child:hover {
-        background-color: #545b62;
-    }
-
-    .small {
-      font-size: 12px;
-      color: #666;
-      margin-top: 8px;
-    }
-
-    .err {
-      color: #b00020;
-      margin-top: 10px;
-      white-space: pre-wrap;
-      font-size: 14px;
+      background: white; width: 340px; padding: 40px 30px;
+      border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1);
       text-align: center;
-      min-height: 20px; /* 预留位置防止抖动 */
     }
+    /* QQ 风格的大标题 */
+    h1 { margin: 0 0 10px; color: #007bff; letter-spacing: 1px; }
+    .subtitle { color: #999; font-size: 14px; margin-bottom: 30px; }
+    
+    input {
+      width: 100%; padding: 12px; margin-bottom: 15px;
+      border: 1px solid #ddd; border-radius: 8px;
+      box-sizing: border-box; outline: none; background: #fafafa;
+    }
+    input:focus { border-color: #007bff; background: white; }
+    
+    .btn-login {
+      width: 100%; padding: 12px; border: 0; border-radius: 8px;
+      background-color: #007bff; color: white; font-size: 16px;
+      cursor: pointer; font-weight: bold; margin-top: 10px;
+      box-shadow: 0 4px 10px rgba(0,123,255,0.3);
+    }
+    .btn-login:hover { background-color: #0056b3; }
+    
+    .footer { margin-top: 20px; font-size: 14px; color: #666; }
+    .link { color: #007bff; text-decoration: none; cursor: pointer; }
+    .err { color: #b00020; margin-top: 15px; font-size: 13px; min-height: 18px; }
   </style>
 </head>
-
 <body>
-
   <div class="card">
-    <h2 style="text-align: center; margin-top: 0;">Dreams</h2>
+    <h1>Dreams</h1>
+    <div class="subtitle">登录你的梦想世界</div>
 
-    <div class="small" style="text-align: center; margin-bottom: 10px;">
-      用户名 + 密码登录（首次可注册）
-    </div>
+    <input id="username" placeholder="请输入账号 / UID" autocomplete="username" />
+    <input id="password" type="password" placeholder="请输入密码" autocomplete="current-password" />
 
-    <input
-      id="username"
-      placeholder="用户名"
-      autocomplete="username"
-    />
-
-    <input
-      id="password"
-      type="password"
-      placeholder="密码"
-      autocomplete="current-password"
-    />
-
-    <div class="small">头像（可选）：</div>
-    <input
-      id="avatar"
-      type="file"
-      accept="image/*"
-    />
-
-    <div class="row">
-      <button id="btnLogin" onclick="doLogin()">登录</button>
-      <button id="btnReg" onclick="doRegister()">注册</button>
+    <button class="btn-login" id="btnLogin" onclick="doLogin()">登录</button>
+    
+    <div class="footer">
+        还没有账号？ <a href="register.html" class="link">立即注册</a>
     </div>
 
     <div id="err" class="err"></div>
   </div>
 
   <script src="./app.js"></script>
-
   <script>
-    /*
-      页面加载后立即执行
-    */
-    (async function autoRedirect() {
-        // 支持回车登录
+    (async function init() {
         document.getElementById("password").addEventListener("keydown", (e) => {
             if (e.key === "Enter") doLogin();
         });
-
-        // 自动跳转检查
         if(localStorage.getItem("dreams_token")) {
             const me = await Dreams.apiMe();
-            if (me) {
-                location.href = "./conversations.html";
-            }
+            if (me) location.href = "./conversations.html";
         }
     })();
 
-    /*
-      登录逻辑
-    */
     async function doLogin() {
-      setLoading(true); // 禁用按钮
-      document.getElementById("err").innerText = "";
+      const btn = document.getElementById("btnLogin");
+      const err = document.getElementById("err");
+      
+      btn.innerText = "登录中...";
+      btn.disabled = true;
+      err.innerText = "";
 
       const u = document.getElementById("username").value.trim();
       const p = document.getElementById("password").value;
 
       if (!u || !p) {
-        setLoading(false);
-        return showErr("请输入用户名和密码");
+        btn.innerText = "登录"; btn.disabled = false;
+        return (err.innerText = "请输入账号和密码");
       }
 
-      // 调用后端登录接口
-      const d = await Dreams.apiPost(
-        "/api/login",
-        { username: u, password: p }
-      );
+      const d = await Dreams.apiPost("/api/login", { username: u, password: p });
 
       if (d.error) {
-        setLoading(false);
-        return showErr(d.error);
+        btn.innerText = "登录"; btn.disabled = false;
+        return (err.innerText = d.error);
       }
 
-      // 登录成功
       Dreams.setToken(d.token);
       Dreams.setUid(d.uid);
       location.href = "./conversations.html";
-    }
-
-    /*
-      注册逻辑
-    */
-    async function doRegister() {
-      setLoading(true);
-      document.getElementById("err").innerText = "";
-
-      const u = document.getElementById("username").value.trim();
-      const p = document.getElementById("password").value;
-
-      if (!u || !p) {
-        setLoading(false);
-        return showErr("请输入用户名和密码");
-      }
-
-      let avatarBase64 = null;
-      const file = document.getElementById("avatar").files[0];
-      if (file) {
-        avatarBase64 = await Dreams.fileToBase64(file);
-      }
-
-      // 调用后端注册接口
-      const d = await Dreams.apiPost(
-        "/api/register",
-        {
-          username: u,
-          password: p,
-          avatar: avatarBase64
-        }
-      );
-
-      if (d.error) {
-        setLoading(false);
-        return showErr(d.error);
-      }
-
-      // 注册成功
-      Dreams.setToken(d.token);
-      Dreams.setUid(d.uid);
-      location.href = "./conversations.html";
-    }
-
-    /*
-      工具函数
-    */
-    function showErr(msg) {
-      document.getElementById("err").innerText = msg;
-    }
-
-    // 控制按钮状态（防止重复点击）
-    function setLoading(isLoading) {
-        const btnLogin = document.getElementById("btnLogin");
-        const btnReg = document.getElementById("btnReg");
-        
-        if (isLoading) {
-            btnLogin.disabled = true;
-            btnReg.disabled = true;
-            btnLogin.innerText = "处理中...";
-        } else {
-            btnLogin.disabled = false;
-            btnReg.disabled = false;
-            btnLogin.innerText = "登录";
-        }
     }
   </script>
 </body>
