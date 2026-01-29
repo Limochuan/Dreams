@@ -1,297 +1,135 @@
-<!doctype html>
-<html lang="zh">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+from typing import List, Dict, Optional
+from db import get_conn
 
-  <title>Dreams - Conversations</title>
+def create_private(uid1: int, uid2: int) -> int:
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            # 检查是否已存在私聊
+            cur.execute(
+                """
+                SELECT c.id FROM dreams_conversations c
+                JOIN dreams_conversation_members m1 ON c.id = m1.conversation_id
+                JOIN dreams_conversation_members m2 ON c.id = m2.conversation_id
+                WHERE c.type = 'private' AND m1.uid = %s AND m2.uid = %s
+                """,
+                (uid1, uid2)
+            )
+            existing = cur.fetchone()
+            if existing:
+                return existing["id"]
 
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f4f4f4;
-      padding: 20px;
-    }
+            cur.execute("INSERT INTO dreams_conversations (type) VALUES ('private')")
+            cid = cur.lastrowid
+            
+            cur.execute("INSERT INTO dreams_conversation_members (conversation_id, uid) VALUES (%s, %s), (%s, %s)", (cid, uid1, cid, uid2))
+            conn.commit()
+            return cid
+    finally:
+        conn.close()
 
-    .wrap {
-      max-width: 760px;
-      margin: 0 auto;
-    }
+def create_group(owner_uid: int, title: str) -> int:
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO dreams_conversations (type, title, owner_uid) VALUES ('group', %s, %s)", (title, owner_uid))
+            cid = cur.lastrowid
+            cur.execute("INSERT INTO dreams_conversation_members (conversation_id, uid, role) VALUES (%s, %s, 'owner')", (cid, owner_uid, cid))
+            conn.commit()
+            return cid
+    finally:
+        conn.close()
 
-    .top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-    }
+# ✨ 核心升级：智能列表查询
+def list_conversations(uid: int) -> List[Dict]:
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            # 这个 SQL 比较复杂，它做了三件事：
+            # 1. 查出会话基本信息 + 我在群里的设置 (置顶/免打扰/上次阅读时间)
+            # 2. 统计未读消息数 (count messages > last_read_at)
+            # 3. 如果是私聊，查出对方的 username 和 avatar
+            sql = """
+            SELECT 
+                c.id, c.type, c.title, c.updated_at,
+                m.is_pinned, m.is_muted, m.last_read_at,
+                
+                (SELECT COUNT(*) FROM dreams_messages msg 
+                 WHERE msg.conversation_id = c.id 
+                 AND msg.created_at > m.last_read_at
+                ) as unread_count,
+                
+                (SELECT content FROM dreams_messages msg 
+                 WHERE msg.conversation_id = c.id 
+                 ORDER BY msg.created_at DESC LIMIT 1
+                ) as last_message,
+                
+                (SELECT created_at FROM dreams_messages msg 
+                 WHERE msg.conversation_id = c.id 
+                 ORDER BY msg.created_at DESC LIMIT 1
+                ) as last_message_time,
 
-    .card {
-      background: #fff;
-      border: 1px solid #ddd;
-      border-radius: 12px;
-      padding: 12px;
-      margin-bottom: 10px;
-    }
+                -- 查找私聊对象的头像和名字 (仅当 type=private 时有效)
+                u_peer.username as peer_name,
+                u_peer.avatar as peer_avatar,
+                u_peer.id as peer_uid
 
-    .list .item {
-      padding: 10px;
-      border-bottom: 1px solid #eee;
-      cursor: pointer;
-    }
+            FROM dreams_conversation_members m
+            JOIN dreams_conversations c ON m.conversation_id = c.id
+            -- 尝试连接私聊的另一个人 (self join)
+            LEFT JOIN dreams_conversation_members m_peer 
+                ON c.id = m_peer.conversation_id 
+                AND c.type = 'private' 
+                AND m_peer.uid != m.uid
+            LEFT JOIN dreams_users u_peer ON m_peer.uid = u_peer.id
+            
+            WHERE m.uid = %s
+            -- 排序：置顶优先 -> 最新消息时间 -> 会话更新时间
+            ORDER BY m.is_pinned DESC, COALESCE(last_message_time, c.updated_at) DESC
+            """
+            cur.execute(sql, (uid,))
+            rows = cur.fetchall()
+            
+            results = []
+            for r in rows:
+                display_title = r["title"]
+                display_avatar = None
+                
+                # 如果是私聊，且标题为空，就显示对方名字
+                if r["type"] == 'private':
+                    display_title = r["peer_name"] or "未知用户"
+                    display_avatar = r["peer_avatar"]
+                
+                results.append({
+                    "id": r["id"],
+                    "type": r["type"],
+                    "title": display_title,
+                    "avatar": display_avatar,
+                    "peer_uid": r["peer_uid"],
+                    "is_pinned": bool(r["is_pinned"]),
+                    "is_muted": bool(r["is_muted"]),
+                    "unread": r["unread_count"],
+                    "last_msg": r["last_message"] or "",
+                    "last_time": r["last_message_time"]
+                })
+            return results
+    finally:
+        conn.close()
 
-    .list .item:last-child {
-      border-bottom: 0;
-    }
+def add_member(operator_uid: int, cid: int, new_uid: int):
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("INSERT IGNORE INTO dreams_conversation_members (conversation_id, uid) VALUES (%s, %s)", (cid, new_uid))
+            conn.commit()
+    finally:
+        conn.close()
 
-    .badge {
-      font-size: 12px;
-      color: #666;
-      margin-left: 6px;
-    }
-
-    input {
-      padding: 10px;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      width: 100%;
-      /* ✨ 修复：防止 padding 撑破布局 */
-      box-sizing: border-box;
-    }
-
-    button {
-      padding: 10px 12px;
-      border: 0;
-      border-radius: 8px;
-      cursor: pointer;
-      background-color: #007bff;
-      color: white;
-    }
-    
-    button:hover {
-        background-color: #0056b3;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-
-    .small {
-      font-size: 12px;
-      color: #666;
-    }
-
-    .err {
-      color: #b00020;
-      white-space: pre-wrap;
-      margin-top: 8px;
-    }
-  </style>
-</head>
-
-<body>
-  <div class="wrap">
-
-    <div class="top">
-      <h2>Dreams</h2>
-      <button onclick="logout()" style="background-color: #dc3545;">退出</button>
-    </div>
-
-    <div class="card">
-      <div class="small">当前账号：</div>
-      <div id="me"></div>
-      <div class="small" style="margin-top:6px;">
-        Token 保存在浏览器本地，下次打开自动登录
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>创建单聊</h3>
-      <div class="small">输入对方 UID（数字）</div>
-      <div class="grid">
-        <input id="peer_uid" placeholder="例如 2" />
-        <button onclick="createPrivate()">开始聊天</button>
-      </div>
-      <div id="err_private" class="err"></div>
-    </div>
-
-    <div class="card">
-      <h3>创建群聊</h3>
-      <div class="small">群名</div>
-      <div class="grid">
-        <input id="group_title" placeholder="例如 我的Dreams群" />
-        <button onclick="createGroup()">创建群</button>
-      </div>
-      <div id="err_group" class="err"></div>
-    </div>
-
-    <div class="card list">
-      <h3>我的会话</h3>
-      <div id="list"></div>
-    </div>
-
-  </div>
-
-  <script src="./app.js"></script>
-
-  <script>
-    /*
-      全局变量：当前用户信息
-    */
-    let me = null;
-
-    /*
-      页面加载后立即执行
-    */
-    (async function init() {
-
-      // 调用 /api/me，app.js 会自动带上 token
-      me = await Dreams.apiMe();
-
-      // 如果没登录，跳回登录页
-      if (!me) {
-        location.href = "./login.html";
-        return;
-      }
-
-      // 显示当前用户信息
-      document.getElementById("me").innerText =
-        "UID: " + me.uid + " | Username: " + me.username;
-
-      // 初次加载会话列表
-      await refreshList();
-
-      // 每 5 秒刷新一次会话列表（简单轮询）
-      setInterval(refreshList, 5000);
-
-    })();
-
-    /*
-      拉取并刷新会话列表
-    */
-    async function refreshList() {
-      // ✨ 修改：直接请求 API，不需要手动拼 token
-      const d = await Dreams.apiGet("/api/conversations");
-
-      if (d.error) return;
-
-      const items = d.items || [];
-      const list = document.getElementById("list");
-      list.innerHTML = "";
-
-      // 没有任何会话
-      if (items.length === 0) {
-        list.innerHTML =
-          "<div class='small'>暂无会话。你可以创建单聊或群聊。</div>";
-        return;
-      }
-
-      // 遍历会话列表
-      for (const c of items) {
-        const div = document.createElement("div");
-        div.className = "item";
-
-        // 会话类型显示文字
-        const typeText = c.type === "group" ? "群聊" : "单聊";
-
-        // 会话标题逻辑
-        const title = c.title
-          ? c.title
-          : (c.type === "group"
-              ? "未命名群"
-              : "conversation#" + c.id);
-
-        // 会话展示内容
-        div.innerHTML =
-          Dreams.escapeHtml(title) +
-          " <span class='badge'>(" + typeText + ")</span>";
-
-        // 点击跳转到 chat.html
-        div.onclick = function () {
-          location.href =
-            "./chat.html?cid=" + encodeURIComponent(c.id) +
-            "&type=" + encodeURIComponent(c.type);
-        };
-
-        list.appendChild(div);
-      }
-    }
-
-    /*
-      创建单聊
-    */
-    async function createPrivate() {
-      document.getElementById("err_private").innerText = "";
-
-      const peer = parseInt(
-        document.getElementById("peer_uid").value.trim(),
-        10
-      );
-
-      if (!peer || peer <= 0) {
-        return showErr("err_private", "请输入正确的 UID（数字）");
-      }
-
-      // ✨ 修改：body 不需要传 token
-      const d = await Dreams.apiPost(
-        "/api/conversations/private",
-        {
-          peer_uid: peer
-        }
-      );
-
-      if (d.error) {
-        return showErr("err_private", d.error);
-      }
-
-      // 创建成功后直接进入聊天页
-      location.href =
-        "./chat.html?cid=" + encodeURIComponent(d.conversation_id) +
-        "&type=private";
-    }
-
-    /*
-      创建群聊
-    */
-    async function createGroup() {
-      document.getElementById("err_group").innerText = "";
-
-      const title =
-        document.getElementById("group_title").value.trim() || "New Group";
-
-      // ✨ 修改：body 不需要传 token
-      const d = await Dreams.apiPost(
-        "/api/conversations/group",
-        {
-          title: title
-        }
-      );
-
-      if (d.error) {
-        return showErr("err_group", d.error);
-      }
-
-      // 创建成功直接进入群聊
-      location.href =
-        "./chat.html?cid=" + encodeURIComponent(d.conversation_id) +
-        "&type=group";
-    }
-
-    /*
-      退出登录
-    */
-    function logout() {
-      // ✨ 修改：调用新版 app.js 的标准退出方法
-      Dreams.logout();
-    }
-
-    /*
-      错误显示工具
-    */
-    function showErr(id, msg) {
-      document.getElementById(id).innerText = msg;
-    }
-  </script>
-</body>
-</html>
+def is_member(uid: int, cid: int) -> bool:
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM dreams_conversation_members WHERE conversation_id=%s AND uid=%s", (cid, uid))
+            return cur.fetchone() is not None
+    finally:
+        conn.close()
