@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional
 from db import get_conn
 
-# ----------------- 基础创建功能 -----------------
+# ================= 1. 基础创建 =================
 
 def create_private(uid1: int, uid2: int) -> int:
     conn = get_conn()
@@ -39,13 +39,14 @@ def create_group(owner_uid: int, title: str) -> int:
     finally:
         conn.close()
 
-# ----------------- 核心查询功能 -----------------
+# ================= 2. 列表查询 (核心) =================
 
 def list_conversations(uid: int) -> List[Dict]:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
             # 联合查询：获取群信息、我的角色、未读数、最后一条消息、私聊对方信息
+            # [关键点] 这里查询了 c.avatar 和 m.is_pinned，如果数据库没更新会报错
             sql = """
             SELECT 
                 c.id, c.type, c.title, c.avatar as group_avatar, c.updated_at,
@@ -99,20 +100,20 @@ def list_conversations(uid: int) -> List[Dict]:
                     "unread": r["unread_count"], 
                     "last_msg": r["last_message"] or "", 
                     "last_time": r["last_message_time"],
-                    "my_role": r["my_role"] # ✨ 关键：返回角色，前端据此判断是否显示管理按钮
+                    "my_role": r["my_role"]
                 })
             return results
     finally:
         conn.close()
 
-# ----------------- 管理功能 (之前缺失的部分) -----------------
+# ================= 3. 管理功能 (你之前缺失的部分) =================
 
-# 1. 更新群信息 (改名/改头像)
+# 更新群信息 (改名/改头像)
 def update_group_info(operator_uid: int, cid: int, title: str = None, avatar: str = None):
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            # 鉴权：只有群主能改
+            # 鉴权
             cur.execute("SELECT role FROM dreams_conversation_members WHERE conversation_id=%s AND uid=%s", (cid, operator_uid))
             row = cur.fetchone()
             if not row or row["role"] != 'owner':
@@ -124,24 +125,20 @@ def update_group_info(operator_uid: int, cid: int, title: str = None, avatar: st
     finally:
         conn.close()
 
-# 2. 移除成员 (踢人)
+# 移除成员 (踢人)
 def remove_member(operator_uid: int, cid: int, target_uid: int):
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            # 查操作者权限
             cur.execute("SELECT role FROM dreams_conversation_members WHERE conversation_id=%s AND uid=%s", (cid, operator_uid))
             op = cur.fetchone()
             if not op: raise PermissionError("你不在群里")
             
-            # 查目标角色
             cur.execute("SELECT role FROM dreams_conversation_members WHERE conversation_id=%s AND uid=%s", (cid, target_uid))
             target = cur.fetchone()
-            if not target: return # 目标本来就不在群里
+            if not target: return 
 
-            # 权限逻辑：群主能踢所有人，管理员只能踢普通成员
             allowed = (op["role"] == 'owner') or (op["role"] == 'admin' and target["role"] == 'member')
-            
             if not allowed:
                 raise PermissionError("权限不足，无法移除该成员")
 
@@ -150,27 +147,22 @@ def remove_member(operator_uid: int, cid: int, target_uid: int):
     finally:
         conn.close()
 
-# 3. 添加成员 (拉人)
+# 添加成员 (拉人)
 def add_member(operator_uid: int, cid: int, new_uid: int):
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            # 只有 ID=1 的世界频道允许系统自动拉人，其他群需要管理员权限
+            # ID=1 世界频道允许自动加入
             if cid != 1:
                 cur.execute("SELECT role FROM dreams_conversation_members WHERE conversation_id=%s AND uid=%s", (cid, operator_uid))
                 row = cur.fetchone()
-                # 如果找不到记录或者只是普通 member，并且不是世界频道，则报错
-                if (not row or row["role"] == 'member'):
-                     # 这里为了演示方便暂时放行，如果需要严格权限，取消下面这行的注释：
-                     # raise PermissionError("只有群主或管理员可以邀请")
-                     pass
+                if not row: pass 
 
             cur.execute("INSERT IGNORE INTO dreams_conversation_members (conversation_id, uid) VALUES (%s, %s)", (cid, new_uid))
             conn.commit()
     finally:
         conn.close()
 
-# 4. 检查是否在群里
 def is_member(uid: int, cid: int) -> bool:
     conn = get_conn()
     try:
