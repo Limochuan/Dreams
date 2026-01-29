@@ -36,12 +36,12 @@ init_db()
 
 
 # =========================
-# 📂 静态资源与上传目录 (核心修改)
+# 📂 静态资源与上传目录
 # =========================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# 1. 配置上传目录 (用来存图片)
+# 1. 配置上传目录
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
@@ -49,26 +49,14 @@ if not os.path.exists(UPLOAD_DIR):
 # 2. 配置前端目录
 FRONTEND_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "frontend"))
 
-# 3. 挂载上传目录：让 /uploads/xxx.png 可以被访问
-app.mount(
-    "/uploads",
-    StaticFiles(directory=UPLOAD_DIR),
-    name="uploads"
-)
-
-# 4. 挂载前端页面 (注意：/static 要放在最后或者非根路径，但在 heavy logic 中挂载根路径要小心覆盖 API)
-# 这里我们把前端挂载到 /static，根路径做跳转
-app.mount(
-    "/static",
-    StaticFiles(directory=FRONTEND_DIR),
-    name="static"
-)
+# 3. 挂载
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 
 # =========================
-# 根路径：重定向到登录页
+# 根路径
 # =========================
-
 @app.get("/")
 def root():
     return RedirectResponse(url="/static/login.html")
@@ -77,7 +65,6 @@ def root():
 # =========================
 # 工具函数
 # =========================
-
 def require_uid_from_token(token: str) -> int:
     uid = get_uid_by_token(token)
     if not uid:
@@ -88,15 +75,13 @@ def require_uid_from_token(token: str) -> int:
 # =========================
 # Auth API
 # =========================
-
 @app.post("/api/register")
 def api_register(payload: dict):
     try:
-        # 这里 reg_user 内部逻辑已经修改为保存文件了
         return reg_user(
             username=payload.get("username", "").strip(),
             password=payload.get("password", ""),
-            avatar=payload.get("avatar"), # 传入 Base64
+            avatar=payload.get("avatar"),
         )
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -123,7 +108,7 @@ def api_me(token: str):
         return {
             "uid": user["id"],
             "username": user["username"],
-            "avatar": user.get("avatar"), # 这里返回的已经是 URL 了
+            "avatar": user.get("avatar"),
         }
     except PermissionError as e:
         return JSONResponse({"error": str(e)}, status_code=401)
@@ -132,7 +117,6 @@ def api_me(token: str):
 # =========================
 # Conversations API
 # =========================
-
 @app.get("/api/conversations")
 def api_list_conversations(token: str):
     try:
@@ -178,7 +162,6 @@ def api_add_member(conversation_id: int, payload: dict):
 # =========================
 # Messages API
 # =========================
-
 @app.get("/api/conversations/{conversation_id}/messages")
 def api_list_messages(conversation_id: int, token: str, limit: int = 50):
     try:
@@ -191,24 +174,30 @@ def api_list_messages(conversation_id: int, token: str, limit: int = 50):
 
 
 # =========================
-# WebSocket
+# WebSocket (✨ 核心修改)
 # =========================
-
 @app.websocket("/ws/{conversation_id}")
 async def ws_chat(
     ws: WebSocket, 
     conversation_id: int,
-    token: str = Query(...) 
+    token: str = Query(...)  # URL 参数带 token
 ):
+    # 1. 鉴权
     uid = get_uid_by_token(token)
-    
     if not uid or not is_member(uid, conversation_id):
         await ws.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
+    # 2. 建立连接
     await ws.accept()
     await ws_manager.join(conversation_id, ws, uid)
 
+    # ✨ 提前查好当前用户的信息，方便发消息时带上头像
+    current_user = get_user_by_id(uid)
+    sender_avatar = current_user["avatar"] if current_user else None
+    sender_username = current_user["username"] if current_user else f"User {uid}"
+
+    # 3. 广播加入信息
     await ws_manager.broadcast(conversation_id, {
         "type": "system",
         "event": "join",
@@ -228,14 +217,19 @@ async def ws_chat(
             if not content:
                 continue
 
+            # 存库
             save_message(conversation_id, uid, content)
 
+            # ✨ 4. 广播消息（带上头像和名字）
             await ws_manager.broadcast(conversation_id, {
                 "type": "message",
                 "conversation_id": conversation_id,
                 "sender_uid": uid,
                 "content": content,
                 "device": detect_device(ws),
+                # 新增字段
+                "sender_avatar": sender_avatar,
+                "sender_username": sender_username
             })
 
     except WebSocketDisconnect:
