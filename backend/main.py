@@ -414,3 +414,74 @@ def api_chat_setting(conversation_id: int, payload: dict):
         conn.close()
         
 # ... 后面的代码不变 ...
+
+# ... (前面的 imports 和 api_list_conversations 保持不变) ...
+
+# ✨ 新增：获取好友列表
+@app.get("/api/friends")
+def api_get_friends(token: str):
+    uid = require_uid_from_token(token)
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT u.id, u.username, u.avatar, u.gender 
+                FROM dreams_friends f
+                JOIN dreams_users u ON f.friend_uid = u.id
+                WHERE f.uid = %s
+                """,
+                (uid,)
+            )
+            return {"items": cur.fetchall()}
+    finally:
+        conn.close()
+
+# ✨ 新增：标记会话已读 (清除红点)
+@app.post("/api/conversations/{conversation_id}/read")
+def api_mark_read(conversation_id: int, payload: dict):
+    uid = require_uid_from_token(payload.get("token"))
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE dreams_conversation_members 
+                SET last_read_at = NOW() 
+                WHERE conversation_id = %s AND uid = %s
+                """,
+                (conversation_id, uid)
+            )
+            conn.commit()
+        return {"ok": True}
+    finally:
+        conn.close()
+
+# ✨ 新增：设置置顶/免打扰
+@app.post("/api/conversations/{conversation_id}/setting")
+def api_chat_setting(conversation_id: int, payload: dict):
+    uid = require_uid_from_token(payload.get("token"))
+    action = payload.get("action") # 'pin', 'unpin', 'mute', 'unmute'
+    
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            sql = ""
+            if action == 'pin':
+                sql = "UPDATE dreams_conversation_members SET is_pinned=1 WHERE conversation_id=%s AND uid=%s"
+            elif action == 'unpin':
+                sql = "UPDATE dreams_conversation_members SET is_pinned=0 WHERE conversation_id=%s AND uid=%s"
+            elif action == 'mute':
+                sql = "UPDATE dreams_conversation_members SET is_muted=1 WHERE conversation_id=%s AND uid=%s"
+            elif action == 'unmute':
+                sql = "UPDATE dreams_conversation_members SET is_muted=0 WHERE conversation_id=%s AND uid=%s"
+            else:
+                return JSONResponse({"error": "invalid action"}, status_code=400)
+                
+            cur.execute(sql, (conversation_id, uid))
+            conn.commit()
+        return {"ok": True}
+    finally:
+        conn.close()
+
+# ... (后面的代码保持不变) ...
