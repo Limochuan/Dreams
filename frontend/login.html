@@ -1,19 +1,15 @@
 <!doctype html>
 <html lang="zh">
 <head>
-  <!-- 页面字符集 -->
   <meta charset="UTF-8" />
 
-  <!-- 移动端自适应 -->
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
 
-  <!-- 页面标题 -->
   <title>Dreams - Login</title>
 
-  <!-- 页面样式，仅负责显示 -->
   <style>
     body {
-      font-family: Arial;
+      font-family: Arial, sans-serif;
       background: #f4f4f4;
       padding: 20px;
     }
@@ -25,6 +21,8 @@
       padding: 16px;
       max-width: 420px;
       margin: 0 auto;
+      /* 防止卡片本身在小屏幕上溢出 */
+      box-sizing: border-box; 
     }
 
     input {
@@ -33,6 +31,15 @@
       margin: 8px 0;
       border: 1px solid #ccc;
       border-radius: 8px;
+      
+      /* ✨ 核心修复：确保宽度包含 padding 和 border，防止撑破容器 */
+      box-sizing: border-box; 
+    }
+
+    /* 专门优化一下文件上传框的样式 */
+    input[type="file"] {
+        padding: 6px; /* 稍微减小内边距 */
+        background: #fafafa;
     }
 
     button {
@@ -41,15 +48,31 @@
       border-radius: 8px;
       cursor: pointer;
       width: 100%;
+      background-color: #007bff; /* 加个简单的蓝色背景，看起来更像按钮 */
+      color: white;
+      font-size: 16px;
+    }
+    
+    button:hover {
+        background-color: #0056b3;
     }
 
     .row {
       display: flex;
       gap: 10px;
+      margin-top: 10px;
     }
 
     .row button {
       width: 50%;
+    }
+    
+    /* 让注册按钮颜色淡一点，区分主次 */
+    .row button:last-child {
+        background-color: #6c757d;
+    }
+    .row button:last-child:hover {
+        background-color: #545b62;
     }
 
     .small {
@@ -62,29 +85,27 @@
       color: #b00020;
       margin-top: 10px;
       white-space: pre-wrap;
+      font-size: 14px;
+      text-align: center;
     }
   </style>
 </head>
 
 <body>
 
-  <!-- 登录 / 注册卡片 -->
   <div class="card">
-    <h2>Dreams</h2>
+    <h2 style="text-align: center; margin-top: 0;">Dreams</h2>
 
-    <!-- 页面说明 -->
-    <div class="small">
+    <div class="small" style="text-align: center; margin-bottom: 10px;">
       用户名 + 密码登录（首次可注册）
     </div>
 
-    <!-- 用户名输入框 -->
     <input
       id="username"
       placeholder="用户名"
       autocomplete="username"
     />
 
-    <!-- 密码输入框 -->
     <input
       id="password"
       type="password"
@@ -92,7 +113,6 @@
       autocomplete="current-password"
     />
 
-    <!-- 头像上传（注册时使用，可选） -->
     <div class="small">头像（可选）：</div>
     <input
       id="avatar"
@@ -100,17 +120,14 @@
       accept="image/*"
     />
 
-    <!-- 登录 / 注册按钮 -->
     <div class="row">
       <button onclick="doLogin()">登录</button>
       <button onclick="doRegister()">注册</button>
     </div>
 
-    <!-- 错误提示区域 -->
     <div id="err" class="err"></div>
   </div>
 
-  <!-- 引入公共 JS（token、API 封装等） -->
   <script src="./app.js"></script>
 
   <script>
@@ -120,9 +137,12 @@
       直接跳转到会话列表页
     */
     (async function autoRedirect() {
-      const me = await Dreams.apiMe();
-      if (me) {
-        location.href = "./conversations.html";
+      // 简单判断是否有 token，避免每次刷新都闪烁
+      if(localStorage.getItem("dreams_token")) {
+          const me = await Dreams.apiMe();
+          if (me) {
+            location.href = "./conversations.html";
+          }
       }
     })();
 
