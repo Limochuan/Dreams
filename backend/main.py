@@ -1,57 +1,85 @@
 import json
 import os
-import logging
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, Depends, HTTPException, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from typing import Optional
 
-# 假设这些是你的本地模块
 from init_db import init_db
-from auth import register as reg_user, login as login_user, get_uid_by_token, get_user_by_id
-from conversations import list_conversations, create_private, create_group, add_member, is_member
+from auth import (
+    register as reg_user, 
+    login as login_user, 
+    get_uid_by_token, 
+    get_user_by_id
+)
+from conversations import (
+    list_conversations, 
+    create_private, 
+    create_group, 
+    add_member, 
+    is_member
+)
 from messages import save_message, list_recent_messages
 from ws import ws_manager, detect_device
 
-# 初始化日志
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("DreamsBackend")
+
+# =========================
+# FastAPI App
+# =========================
 
 app = FastAPI(title="Dreams Backend")
+
 
 # =========================
 # 数据库初始化
 # =========================
+# 启动时检查表是否存在，并确保世界频道存在
 init_db()
 
-# =========================
-# 依赖注入：Token 校验
-# =========================
-# 将 Token 校验抽离，支持从 Header 或 Query 两种方式获取，提高复用性
-def get_current_uid(token: Optional[str] = Query(None), authorization: Optional[str] = Header(None)) -> int:
-    # 优先尝试从 Header 获取 (Bearer token)
-    final_token = token
-    if authorization and authorization.startswith("Bearer "):
-        final_token = authorization.split(" ")[1]
-    
-    if not final_token:
-        raise HTTPException(status_code=401, detail="Missing token")
-    
-    uid = get_uid_by_token(final_token)
-    if not uid:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-    return uid
 
 # =========================
-# API 路由 (必须在 StaticFiles 之前)
+# 静态前端目录
+# =========================
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# 假设前端在 backend 的上一级目录的 frontend 文件夹中
+FRONTEND_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "frontend"))
+
+if not os.path.exists(FRONTEND_DIR):
+    print(f"Warning: Frontend directory not found at {FRONTEND_DIR}")
+
+app.mount(
+    "/static",
+    StaticFiles(directory=FRONTEND_DIR),
+    name="static"
+)
+
+
+# =========================
+# 根路径：重定向到登录页
+# =========================
+
+@app.get("/")
+def root():
+    return RedirectResponse(url="/static/login.html")
+
+
+# =========================
+# 工具函数
+# =========================
+
+def require_uid_from_token(token: str) -> int:
+    uid = get_uid_by_token(token)
+    if not uid:
+        raise PermissionError("invalid token")
+    return uid
+
+
+# =========================
+# Auth API (注意：去掉了 async)
 # =========================
 
 @app.post("/api/register")
 def api_register(payload: dict):
-    """
-    注意：这里去掉了 async，因为底层的数据库操作通常是同步的。
-    FastAPI 会在外部线程池处理此类请求，防止阻塞主循环。
-    """
     try:
         return reg_user(
             username=payload.get("username", "").strip(),
@@ -60,6 +88,7 @@ def api_register(payload: dict):
         )
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
+
 
 @app.post("/api/login")
 def api_login(payload: dict):
@@ -71,118 +100,150 @@ def api_login(payload: dict):
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
+
 @app.get("/api/me")
-def api_me(uid: int = Depends(get_current_uid)):
-    user = get_user_by_id(uid)
-    return {
-        "uid": user["id"],
-        "username": user["username"],
-        "avatar": user.get("avatar"),
-    }
+def api_me(token: str):
+    try:
+        uid = require_uid_from_token(token)
+        user = get_user_by_id(uid)
+        if not user:
+            return JSONResponse({"error": "user not found"}, status_code=404)
+        return {
+            "uid": user["id"],
+            "username": user["username"],
+            "avatar": user.get("avatar"),
+        }
+    except PermissionError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
 
-@app.get("/api/conversations")
-def api_list_conversations(uid: int = Depends(get_current_uid)):
-    return {"items": list_conversations(uid)}
-
-@app.post("/api/conversations/private")
-def api_create_private(payload: dict, uid: int = Depends(get_current_uid)):
-    cid = create_private(uid, int(payload["peer_uid"]))
-    return {"conversation_id": cid}
-
-@app.post("/api/conversations/group")
-def api_create_group(payload: dict, uid: int = Depends(get_current_uid)):
-    cid = create_group(uid, payload.get("title") or "New Group")
-    return {"conversation_id": cid}
-
-@app.post("/api/conversations/{conversation_id}/members")
-def api_add_member(conversation_id: int, payload: dict, uid: int = Depends(get_current_uid)):
-    # 只有已经在群里的人才能拉人（简单权限校验）
-    if not is_member(uid, conversation_id):
-        return JSONResponse({"error": "Forbidden"}, status_code=403)
-    add_member(uid, conversation_id, int(payload["new_uid"]))
-    return {"ok": True}
-
-@app.get("/api/conversations/{conversation_id}/messages")
-def api_list_messages(conversation_id: int, limit: int = 50, uid: int = Depends(get_current_uid)):
-    if not is_member(uid, conversation_id):
-        return JSONResponse({"error": "not a member"}, status_code=403)
-    return {"items": list_recent_messages(conversation_id, limit)}
 
 # =========================
-# WebSocket 逻辑
+# Conversations API (注意：去掉了 async)
+# =========================
+
+@app.get("/api/conversations")
+def api_list_conversations(token: str):
+    try:
+        uid = require_uid_from_token(token)
+        return {"items": list_conversations(uid)}
+    except PermissionError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+
+@app.post("/api/conversations/private")
+def api_create_private(payload: dict):
+    try:
+        uid = require_uid_from_token(payload.get("token", ""))
+        peer_uid = int(payload.get("peer_uid"))
+        cid = create_private(uid, peer_uid)
+        return {"conversation_id": cid}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.post("/api/conversations/group")
+def api_create_group(payload: dict):
+    try:
+        uid = require_uid_from_token(payload.get("token", ""))
+        title = (payload.get("title") or "").strip() or "New Group"
+        cid = create_group(uid, title)
+        return {"conversation_id": cid}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.post("/api/conversations/{conversation_id}/members")
+def api_add_member(conversation_id: int, payload: dict):
+    try:
+        uid = require_uid_from_token(payload.get("token", ""))
+        new_uid = int(payload.get("new_uid"))
+        add_member(uid, conversation_id, new_uid)
+        return {"ok": True}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+# =========================
+# Messages API (注意：去掉了 async)
+# =========================
+
+@app.get("/api/conversations/{conversation_id}/messages")
+def api_list_messages(conversation_id: int, token: str, limit: int = 50):
+    try:
+        uid = require_uid_from_token(token)
+        if not is_member(uid, conversation_id):
+            return JSONResponse({"error": "not a member"}, status_code=403)
+        return {"items": list_recent_messages(conversation_id, limit)}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+# =========================
+# WebSocket (核心：保持 async，并加上了握手验证)
 # =========================
 
 @app.websocket("/ws/{conversation_id}")
-async def ws_chat(ws: WebSocket, conversation_id: int):
-    # 1. 握手阶段：先接收一条认证消息
+async def ws_chat(
+    ws: WebSocket, 
+    conversation_id: int,
+    token: str = Query(...)  # ✅ 从 URL 参数中获取 token
+):
+    # 1. 握手前验证：如果 token 无效，直接拒绝连接
+    uid = get_uid_by_token(token)
+    
+    # 因为 is_member 内部查库是同步的，为了不阻塞 WS 握手，
+    # 严格来说这里应该在线程池跑，但为了简化代码，
+    # 且 is_member 查询非常快，这里直接调用影响不大。
+    # 如果追求极致性能，可以用 run_in_executor。
+    if not uid or not is_member(uid, conversation_id):
+        await ws.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    # 2. 验证通过，建立连接
     await ws.accept()
-    uid = None
+    
+    # 3. 加入管理器
+    await ws_manager.join(conversation_id, ws, uid)
+
+    # 4. 广播“加入房间”事件
+    await ws_manager.broadcast(conversation_id, {
+        "type": "system",
+        "event": "join",
+        "uid": uid,
+        "device": detect_device(ws),
+    })
+
     try:
-        auth_data = await ws.receive_text()
-        auth = json.loads(auth_data)
-        token = auth.get("token")
-        uid = get_uid_by_token(token)
-
-        if not uid or not is_member(uid, conversation_id):
-            logger.warning(f"WS Auth Failed for conversation {conversation_id}")
-            await ws.send_text(json.dumps({"error": "Unauthorized"}))
-            await ws.close(code=4003)
-            return
-
-        # 2. 加入管理器
-        await ws_manager.join(conversation_id, ws, uid)
-        
-        # 3. 广播上线通知
-        await ws_manager.broadcast(conversation_id, {
-            "type": "system",
-            "event": "join",
-            "uid": uid,
-            "device": detect_device(ws),
-        })
-
-        # 4. 消息循环
         while True:
+            # 等待接收消息
             data = await ws.receive_text()
-            msg_json = json.loads(data)
-            content = (msg_json.get("content") or "").strip()
             
+            # 尝试解析 JSON
+            try:
+                frame = json.loads(data)
+                content = (frame.get("content") or "").strip()
+            except json.JSONDecodeError:
+                continue
+
             if not content:
                 continue
 
-            # 保存到数据库（同步操作建议放在线程池中，或者确保 save_message 极快）
+            # 5. 保存消息到数据库 (注意：这里在 async 里调同步 DB 函数)
+            # 虽然 save_message 是同步的，但对聊天体验影响在毫秒级，Demo 可接受
+            # 完美做法是: await loop.run_in_executor(None, save_message, ...)
             save_message(conversation_id, uid, content)
-            
-            # 广播消息
+
+            # 6. 广播消息
             await ws_manager.broadcast(conversation_id, {
                 "type": "message",
+                "conversation_id": conversation_id,
                 "sender_uid": uid,
                 "content": content,
                 "device": detect_device(ws),
             })
 
     except WebSocketDisconnect:
-        logger.info(f"User {uid} disconnected from {conversation_id}")
-    except Exception as e:
-        logger.error(f"WS Error: {e}")
+        pass
     finally:
-        if uid:
-            ws_manager.leave(conversation_id, ws)
-
-# =========================
-# 静态前端挂载 (最后挂载，防止拦截 API)
-# =========================
-
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
-
-if os.path.isdir(FRONTEND_DIR):
-    # 根目录重定向到登录页
-    @app.get("/")
-    async def root():
-        return RedirectResponse("/login.html")
-
-    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
-else:
-    logger.error(f"Frontend directory not found at {FRONTEND_DIR}. Static serving disabled.")
-
-# 启动提示：使用 uvicorn main:app --reload 运行
+        # 7. 断开清理
+        ws_manager.leave(conversation_id, ws)
