@@ -311,3 +311,36 @@ async def ws_chat(
         pass
     finally:
         ws_manager.leave(conversation_id, ws)
+
+# ... (前面的代码不变) ...
+
+# =========================
+# ✨ 新增：获取群成员列表（带身份角色）
+# =========================
+@app.get("/api/conversations/{conversation_id}/members")
+def api_get_members(conversation_id: int, token: str):
+    try:
+        uid = require_uid_from_token(token)
+        if not is_member(uid, conversation_id):
+            return JSONResponse({"error": "not a member"}, status_code=403)
+        
+        conn = get_conn()
+        try:
+            with conn.cursor() as cur:
+                # 关联查询：拿到成员的 ID, 用户名, 头像, 还有他在群里的角色(role)
+                cur.execute(
+                    """
+                    SELECT u.id, u.username, u.avatar, u.gender, m.role, m.joined_at
+                    FROM dreams_conversation_members m
+                    JOIN dreams_users u ON m.uid = u.id
+                    WHERE m.conversation_id = %s
+                    ORDER BY FIELD(m.role, 'owner', 'admin', 'member'), m.joined_at ASC
+                    """,
+                    (conversation_id,)
+                )
+                members = cur.fetchall()
+                return {"items": members}
+        finally:
+            conn.close()
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
