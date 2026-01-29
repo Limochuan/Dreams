@@ -105,11 +105,14 @@ def register(username: str, password: str, avatar: Optional[str], gender: str = 
     token = issue_token(uid)
 
     # 3. 自动加入世界频道
+    # 使用 try-except 防止因 import 循环或群不存在导致注册失败
     try:
         from conversations import add_member
-        add_member(uid, 1, uid)
-    except Exception:
-        pass
+        # 参数说明: operator_uid=1 (群主操作), cid=1 (世界频道), new_uid=uid (新注册用户)
+        # 强制用 UID 1 把新人拉进群，避免权限问题
+        add_member(1, 1, uid) 
+    except Exception as e:
+        print(f"Auto-join world channel failed: {e}")
 
     return {
         "uid": uid,
