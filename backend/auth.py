@@ -1,5 +1,8 @@
 import bcrypt
 import secrets
+import base64
+import os
+import time
 from typing import Optional, Dict
 from db import get_conn
 
@@ -8,10 +11,6 @@ from db import get_conn
 # =========================
 
 def _hash_password(password: str) -> str:
-    """
-    使用 bcrypt 对明文密码进行加密
-    返回可直接存入数据库的字符串形式 hash
-    """
     return bcrypt.hashpw(
         password.encode("utf-8"),
         bcrypt.gensalt()
@@ -19,9 +18,6 @@ def _hash_password(password: str) -> str:
 
 
 def _verify_password(password: str, password_hash: str) -> bool:
-    """
-    校验用户输入的明文密码是否与数据库中的 hash 匹配
-    """
     return bcrypt.checkpw(
         password.encode("utf-8"),
         password_hash.encode("utf-8")
@@ -29,14 +25,55 @@ def _verify_password(password: str, password_hash: str) -> bool:
 
 
 # =========================
+# 内部工具函数：头像文件保存
+# =========================
+
+def save_avatar_file(uid: int, base64_str: str) -> Optional[str]:
+    """
+    将 base64 字符串保存为本地图片文件
+    返回：相对 URL 路径 (例如 /uploads/1_163822.png)
+    """
+    if not base64_str or "," not in base64_str:
+        return None
+    
+    try:
+        # 1. 解析 Base64
+        header, data = base64_str.split(",", 1)
+        
+        # 2. 确定扩展名
+        ext = ".png"
+        if "jpeg" in header or "jpg" in header:
+            ext = ".jpg"
+        elif "gif" in header:
+            ext = ".gif"
+
+        # 3. 确定保存目录 (确保和 main.py 里的 UPLOAD_DIR 对应)
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        uploads_dir = os.path.join(current_dir, "uploads")
+        if not os.path.exists(uploads_dir):
+            os.makedirs(uploads_dir)
+            
+        # 4. 生成文件名 (uid + 时间戳)
+        filename = f"{uid}_{int(time.time())}{ext}"
+        filepath = os.path.join(uploads_dir, filename)
+        
+        # 5. 写入文件
+        with open(filepath, "wb") as f:
+            f.write(base64.b64decode(data))
+            
+        # 6. 返回给前端的访问路径
+        return f"/uploads/{filename}"
+        
+    except Exception as e:
+        print(f"Error saving avatar: {e}")
+        return None
+
+
+# =========================
 # 用户查询相关
 # =========================
 
 def get_user_by_username(username: str) -> Optional[Dict]:
-    """
-    通过 username 查询用户
-    返回一整行用户记录（dict），不存在则返回 None
-    """
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -50,10 +87,6 @@ def get_user_by_username(username: str) -> Optional[Dict]:
 
 
 def get_user_by_id(uid: int) -> Optional[Dict]:
-    """
-    通过 uid 查询用户
-    常用于 token 校验后获取用户信息
-    """
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -71,14 +104,6 @@ def get_user_by_id(uid: int) -> Optional[Dict]:
 # =========================
 
 def create_user(username: str, password: str, avatar: Optional[str]) -> int:
-    """
-    创建新用户
-    - username: 用户名（必须唯一）
-    - password: 明文密码（函数内部会自动加密）
-    - avatar: 头像地址，可为空
-
-    返回新用户的 uid（自增主键）
-    """
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -89,7 +114,6 @@ def create_user(username: str, password: str, avatar: Optional[str]) -> int:
                 """,
                 (username, _hash_password(password), avatar),
             )
-            # 务必提交事务（如果未开启 autocommit）
             conn.commit()
             return cur.lastrowid
     finally:
@@ -101,12 +125,7 @@ def create_user(username: str, password: str, avatar: Optional[str]) -> int:
 # =========================
 
 def issue_token(uid: int) -> str:
-    """
-    为指定用户签发一个新的登录 token
-    token 会写入 dreams_sessions 表
-    """
-    token = secrets.token_urlsafe(32)  # 大约 43 个字符
-
+    token = secrets.token_urlsafe(32)
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -124,10 +143,6 @@ def issue_token(uid: int) -> str:
 
 
 def get_uid_by_token(token: str) -> Optional[int]:
-    """
-    通过 token 反查 uid
-    用于 HTTP API / WebSocket 的统一鉴权
-    """
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -151,12 +166,8 @@ def get_uid_by_token(token: str) -> Optional[int]:
 
 def register(username: str, password: str, avatar: Optional[str]) -> Dict:
     """
-    用户注册流程：
-    1. 校验参数
-    2. 检查用户名是否已存在
-    3. 创建用户
-    4. 签发登录 token
-    5. 【新增】自动加入世界频道 (ID=1)
+    注册流程：
+    1. 校验 -> 2. 建用户(avatar暂空) -> 3. 存图片 -> 4. 更新URL -> 5. 发Token -> 6. 加群
     """
     if not username or not password:
         raise ValueError("username and password required")
@@ -165,40 +176,46 @@ def register(username: str, password: str, avatar: Optional[str]) -> Dict:
     if existing:
         raise ValueError("username already exists")
 
-    # 1. 创建用户
-    uid = create_user(username, password, avatar)
+    # 1. 先创建用户，此时 avatar 传 None，因为我们还没生成 URL
+    uid = create_user(username, password, None)
     
-    # 2. 签发 Token
+    avatar_url = None
+    
+    # 2. 如果前端传了 Base64 图片，进行保存
+    if avatar:
+        avatar_url = save_avatar_file(uid, avatar)
+        
+        # 如果保存成功，更新数据库里的 avatar 字段为 URL
+        if avatar_url:
+            conn = get_conn()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE dreams_users SET avatar=%s WHERE id=%s",
+                        (avatar_url, uid)
+                    )
+                    conn.commit()
+            finally:
+                conn.close()
+
+    # 3. 签发 Token
     token = issue_token(uid)
 
-    # 3. 自动加入世界频道 (Conversation ID = 1)
-    # 使用局部导入，避免 circular import (auth <-> conversations)
+    # 4. 自动加入世界频道
     try:
         from conversations import add_member
-        # 尝试将用户加入 ID 为 1 的群组
-        # 参数含义：(操作人uid, 群组id, 被拉人uid)
-        # 这里让用户“自己拉自己”进群，或者忽略权限检查
         add_member(uid, 1, uid)
-        print(f"User {username} (uid={uid}) joined World Channel automatically.")
     except Exception as e:
-        # 如果自动加群失败（例如还没创建世界频道），不要让注册报错，打印日志即可
         print(f"Warning: Failed to add user to World Channel: {e}")
 
     return {
         "uid": uid,
-        "token": token
+        "token": token,
+        "avatar": avatar_url
     }
 
 
 def login(username: str, password: str) -> Dict:
-    """
-    用户登录流程：
-    1. 校验参数
-    2. 查询用户
-    3. 校验密码
-    4. 更新 last_login_at
-    5. 签发新 token
-    """
     if not username or not password:
         raise ValueError("username and password required")
 
@@ -211,7 +228,7 @@ def login(username: str, password: str) -> Dict:
 
     uid = int(user["id"])
 
-    # 更新最近登录时间（非关键逻辑，失败不影响登录）
+    # 更新最近登录时间
     conn = get_conn()
     try:
         with conn.cursor() as cur:
