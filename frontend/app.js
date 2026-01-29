@@ -1,164 +1,169 @@
 // ========================
 // 基础配置
 // ========================
+const API_BASE = ""; // 如果是前后端分离部署，这里填后端地址，例如 "http://127.0.0.1:8000"
 
-// 同域部署时：API_BASE 留空即可
-// 例如：前端文件和 FastAPI 在同一个域名 / 同一个 Railway 服务
-// 如果前后端分开部署，需要填写后端服务地址
-// 示例：const API_BASE = "https://xxx.up.railway.app"
-const API_BASE = "";
+const Dreams = {
+  // ========================
+  // 1. Token / 用户信息管理
+  // ========================
+  setToken: (t) => localStorage.setItem("dreams_token", t),
+  getToken: () => localStorage.getItem("dreams_token"),
+  
+  setUid: (uid) => localStorage.setItem("dreams_uid", String(uid)),
+  getUid: () => localStorage.getItem("dreams_uid"),
 
+  // 登出：清除数据并跳回登录页
+  logout: () => {
+    localStorage.removeItem("dreams_token");
+    localStorage.removeItem("dreams_uid");
+    // 只有当前不在登录页时才跳转，防止死循环
+    if (!location.pathname.includes("login.html")) {
+        location.href = "./login.html";
+    }
+  },
 
-// ========================
-// Token / UID 本地存储
-// ========================
+  // ========================
+  // 2. HTTP 请求封装 (自动带 Token)
+  // ========================
+  
+  // GET 请求：自动在 URL 后追加 ?token=xxx
+  async apiGet(path) {
+    const token = Dreams.getToken();
+    let url = API_BASE + path;
 
-// 保存登录 token
-function setToken(t) {
-  localStorage.setItem("dreams_token", t);
-}
+    // 如果有 token，拼接到 URL 参数中
+    if (token) {
+      // 判断 URL 里是否已经有 ? 了
+      const separator = url.includes("?") ? "&" : "?";
+      url += `${separator}token=${encodeURIComponent(token)}`;
+    }
 
-// 读取登录 token
-function getToken() {
-  return localStorage.getItem("dreams_token");
-}
+    try {
+      const r = await fetch(url, { method: "GET" });
+      if (r.status === 401 || r.status === 403) {
+        // 如果后端返回 401/403，说明 Token 过期或非法
+        Dreams.logout();
+        return { error: "登录已过期，请重新登录" };
+      }
+      return await r.json();
+    } catch (e) {
+      console.error(e);
+      return { error: "网络连接失败" };
+    }
+  },
 
-// 清除登录状态
-function clearToken() {
-  localStorage.removeItem("dreams_token");
-  localStorage.removeItem("dreams_uid");
-}
+  // POST 请求：自动在 JSON Body 里追加 { token: xxx }
+  async apiPost(path, body = {}) {
+    const token = Dreams.getToken();
+    
+    // 自动注入 token 到 body
+    if (token) {
+        body.token = token;
+    }
 
-// 保存当前用户 UID
-function setUid(uid) {
-  localStorage.setItem("dreams_uid", String(uid));
-}
+    try {
+      const r = await fetch(API_BASE + path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      
+      // 注意：登录接口本身可能会报 400 错误（密码错），不应该自动登出
+      // 只有非登录页面的 401 才需要登出
+      if (r.status === 401 && !path.includes("/login")) {
+          Dreams.logout();
+      }
+      
+      return await r.json();
+    } catch (e) {
+      console.error(e);
+      return { error: "网络连接失败" };
+    }
+  },
 
-// 读取当前用户 UID
-function getUid() {
-  return localStorage.getItem("dreams_uid");
-}
+  // 获取当前用户信息
+  async apiMe() {
+    // 复用上面的 apiGet，它会自动带上 token
+    const d = await Dreams.apiGet("/api/me");
+    if (d && !d.error) return d;
+    return null;
+  },
 
+  // ========================
+  // 3. WebSocket 封装 (核心)
+  // ========================
+  
+  /**
+   * 连接 WebSocket
+   * @param {number} conversationId - 会话ID
+   * @param {function} onMessage - 接收到消息时的回调函数
+   * @returns WebSocket 对象
+   */
+  connectChat: (conversationId, onMessage) => {
+    const token = Dreams.getToken();
+    if (!token) return null;
 
-// ========================
-// HTTP 请求封装
-// ========================
+    // 自动判断协议：如果是 https 页面则用 wss，否则用 ws
+    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    const host = location.host; // 例如 127.0.0.1:8000
 
-// GET 请求封装
-async function apiGet(path) {
-  const r = await fetch(API_BASE + path, {
-    method: "GET",
-  });
-  return r.json();
-}
+    // ⚠️ 关键：Token 必须放在 URL 参数里，适配后端 main.py
+    const wsUrl = `${protocol}//${host}/ws/${conversationId}?token=${encodeURIComponent(token)}`;
+    
+    console.log("Connecting WS:", wsUrl);
+    const ws = new WebSocket(wsUrl);
 
-// POST 请求封装
-async function apiPost(path, body) {
-  const r = await fetch(API_BASE + path, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body || {}),
-  });
-  return r.json();
-}
-
-
-// ========================
-// 当前用户信息
-// ========================
-
-// 获取当前登录用户信息
-// 内部逻辑：
-// - 从 localStorage 取 token
-// - 请求 /api/me
-// - 如果 token 无效，返回 null
-async function apiMe() {
-  const token = getToken();
-  if (!token) return null;
-
-  const d = await apiGet(`/api/me?token=${encodeURIComponent(token)}`);
-  if (d && !d.error) return d;
-
-  return null;
-}
-
-
-// ========================
-// URL 参数工具
-// ========================
-
-// 从当前 URL 中读取指定 query 参数
-// 示例：?conversation_id=12
-function getQueryParam(name) {
-  const url = new URL(window.location.href);
-  return url.searchParams.get(name);
-}
-
-
-// ========================
-// 文件工具（头像上传）
-// ========================
-
-// 将 File 对象转换为 base64 字符串
-// 用于头像上传
-// 返回格式：data:image/png;base64,...
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      resolve(reader.result);
+    ws.onopen = () => {
+      console.log(`Connected to room ${conversationId}`);
     };
 
-    reader.onerror = reject;
-
-    reader.readAsDataURL(file);
-  });
-}
-
-
-// ========================
-// 安全工具
-// ========================
-
-// HTML 转义
-// 防止聊天内容直接插入 innerHTML 导致 XSS
-function escapeHtml(s) {
-  return (s || "").replace(/[&<>"']/g, (c) => {
-    const m = {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#039;",
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        onMessage(data); // 把解析好的 JSON 数据传给回调
+      } catch (e) {
+        console.error("WS Message Parse Error", e);
+      }
     };
-    return m[c];
-  });
-}
 
+    ws.onclose = (e) => {
+      console.log("WS Closed", e.code, e.reason);
+      // 如果后端因为 Token 无效拒绝连接 (code 1008)，则登出
+      if (e.code === 1008) {
+          alert("连接验证失败，请重新登录");
+          Dreams.logout();
+      }
+    };
 
-// ========================
-// 全局导出
-// ========================
+    return ws;
+  },
 
-// 统一挂载到 window，供 HTML 页面直接调用
-window.Dreams = {
-  API_BASE,
+  // ========================
+  // 4. 工具函数
+  // ========================
+  
+  getQueryParam: (name) => {
+    const url = new URL(window.location.href);
+    return url.searchParams.get(name);
+  },
 
-  setToken,
-  getToken,
-  clearToken,
+  fileToBase64: (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+    });
+  },
 
-  setUid,
-  getUid,
-
-  apiGet,
-  apiPost,
-  apiMe,
-
-  getQueryParam,
-  fileToBase64,
-  escapeHtml,
+  escapeHtml: (s) => {
+    return (s || "").replace(/[&<>"']/g, (c) => {
+      const m = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" };
+      return m[c];
+    });
+  }
 };
+
+// 挂载到 window
+window.Dreams = Dreams;
