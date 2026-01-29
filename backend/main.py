@@ -485,3 +485,41 @@ def api_chat_setting(conversation_id: int, payload: dict):
         conn.close()
 
 # ... (后面的代码保持不变) ...
+
+# ... (前面的代码保持不变) ...
+
+from conversations import (
+    list_conversations, create_private, create_group, 
+    add_member, is_member, 
+    update_group_info, remove_member # ✨ 记得引入这两个新函数
+)
+
+# ... (中间代码不变) ...
+
+# ✨ 新增：修改群信息 (改名/改头像)
+@app.post("/api/conversations/{conversation_id}/update")
+def api_update_group(conversation_id: int, payload: dict):
+    try:
+        uid = require_uid_from_token(payload.get("token"))
+        update_group_info(
+            operator_uid=uid, 
+            cid=conversation_id, 
+            title=payload.get("title"),
+            avatar=payload.get("avatar")
+        )
+        return {"ok": True}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+# ✨ 新增：踢出成员
+@app.post("/api/conversations/{conversation_id}/kick")
+def api_kick_member(conversation_id: int, payload: dict):
+    try:
+        uid = require_uid_from_token(payload.get("token"))
+        target_uid = int(payload.get("target_uid"))
+        remove_member(operator_uid=uid, cid=conversation_id, target_uid=target_uid)
+        return {"ok": True}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+# ... (后面的代码保持不变) ...
