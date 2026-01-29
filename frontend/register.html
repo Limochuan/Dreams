@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>注册 - Dreams</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
   <style>
     body {
       margin: 0; padding: 0;
@@ -14,11 +15,11 @@
     .card {
       background: white; width: 360px; padding: 40px 30px;
       border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-      text-align: center;
+      text-align: center; position: relative; z-index: 1;
     }
     h2 { margin: 0 0 20px 0; color: #333; font-weight: normal; }
     
-    /* 头像上传区域 */
+    /* 主界面的圆形头像预览 */
     .avatar-upload {
         width: 80px; height: 80px; margin: 0 auto 20px;
         border-radius: 50%; background: #f0f0f0;
@@ -27,10 +28,10 @@
         overflow: hidden; position: relative;
     }
     .avatar-upload:hover { border-color: #007bff; }
-    .avatar-preview { width: 100%; height: 100%; object-fit: cover; display: none; }
+    .avatar-preview { width: 100%; height: 100%; object-fit: cover; display: none; border-radius: 50%; }
     .avatar-label { font-size: 12px; color: #999; }
     
-    /* 输入框 */
+    /* 输入框等样式 (保持不变) */
     .input-group { margin-bottom: 15px; text-align: left; }
     input {
         width: 100%; padding: 12px; border: 1px solid #ddd;
@@ -39,7 +40,6 @@
     }
     input:focus { border-color: #007bff; }
     
-    /* 性别选择 */
     .gender-group { display: flex; gap: 10px; margin-bottom: 20px; }
     .gender-btn {
         flex: 1; padding: 10px; border: 1px solid #ddd;
@@ -50,7 +50,6 @@
         background: #e6f7ff; border-color: #1890ff; color: #1890ff; font-weight: bold;
     }
     
-    /* 按钮 */
     .btn-submit {
         width: 100%; padding: 12px; border: none; border-radius: 8px;
         background: #007bff; color: white; font-size: 16px; cursor: pointer;
@@ -60,17 +59,45 @@
     
     .link { color: #007bff; text-decoration: none; font-size: 14px; }
     .err { color: #b00020; font-size: 13px; margin-bottom: 10px; min-height: 18px;}
+
+    /* =========================================
+       ✨ 新增：裁剪弹窗样式
+       ========================================= */
+    .cropper-modal {
+        display: none; /* 默认隐藏 */
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.7); z-index: 999;
+        flex-direction: column; justify-content: center; align-items: center;
+    }
+    .cropper-wrapper {
+        width: 90%; max-width: 600px; height: 70%; background: #000;
+        overflow: hidden; border-radius: 8px;
+    }
+    /* 原始图片（用于被 Cropper 接管） */
+    #imageToCrop { max-width: 100%; } 
+
+    .cropper-actions {
+        margin-top: 20px; display: flex; gap: 20px;
+    }
+    .btn-crop {
+        padding: 10px 30px; border: none; border-radius: 25px;
+        font-size: 16px; cursor: pointer; font-weight: bold;
+    }
+    .btn-cancel { background: #fff; color: #333; }
+    .btn-confirm { background: #007bff; color: white; }
+
   </style>
 </head>
 <body>
+
   <div class="card">
     <h2>新用户注册</h2>
     
     <div class="avatar-upload" onclick="document.getElementById('fileInput').click()">
-        <img id="preview" class="avatar-preview" />
+        <img id="finalPreview" class="avatar-preview" />
         <span id="uploadText" class="avatar-label">点击<br>上传头像</span>
     </div>
-    <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="handleFile(this)" />
+    <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="handleFileSelect(this)" />
     
     <div id="err" class="err"></div>
 
@@ -95,42 +122,107 @@
     </div>
   </div>
 
+  <div id="cropperModal" class="cropper-modal">
+      <div class="cropper-wrapper">
+          <img id="imageToCrop" src="" alt="Picture">
+      </div>
+      <div class="cropper-actions">
+          <button class="btn-crop btn-cancel" onclick="closeCropper()">取消</button>
+          <button class="btn-crop btn-confirm" onclick="confirmCrop()">确定</button>
+      </div>
+  </div>
+
   <script src="./app.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+  
   <script>
     let selectedGender = 'secret';
-    let avatarBase64 = null;
+    let avatarBase64 = null; // 最终要上传的 Base64
+    let cropper = null;      // Cropper 实例
 
+    // 性别选择
     function selectGender(g) {
         selectedGender = g;
-        // 更新 UI 样式
         document.querySelectorAll('.gender-btn').forEach(b => b.classList.remove('active'));
         document.getElementById(`btn-${g}`).classList.add('active');
     }
 
-    async function handleFile(input) {
+    // ✨ 1. 用户选择了文件
+    function handleFileSelect(input) {
         const file = input.files[0];
         if (file) {
-            // 显示预览
             const reader = new FileReader();
             reader.onload = (e) => {
-                const img = document.getElementById('preview');
-                img.src = e.target.result;
-                img.style.display = 'block';
-                document.getElementById('uploadText').style.display = 'none';
+                // 显示裁剪弹窗
+                document.getElementById('cropperModal').style.display = 'flex';
+                
+                // 设置要裁剪的图片
+                const image = document.getElementById('imageToCrop');
+                image.src = e.target.result;
+                
+                // 销毁旧的 cropper (如果有)
+                if (cropper) {
+                    cropper.destroy();
+                }
+                
+                // 初始化新的 cropper
+                cropper = new Cropper(image, {
+                    aspectRatio: 1 / 1, // ✨ 强制 1:1 比例
+                    viewMode: 1,        // 限制裁剪框在图片内
+                    dragMode: 'move',
+                    autoCropArea: 0.8,
+                    restore: false,
+                    guides: true,
+                    center: true,
+                    highlight: false,
+                    cropBoxMovable: true,
+                    cropBoxResizable: true,
+                    toggleDragModeOnDblclick: false,
+                });
             };
             reader.readAsDataURL(file);
-            // 转 Base64 准备上传
-            avatarBase64 = await Dreams.fileToBase64(file);
         }
+        // 清空 input，确保下次选同一个文件能触发 onchange
+        input.value = '';
     }
 
+    // ✨ 2. 用户点击“确定”裁剪
+    function confirmCrop() {
+        if (!cropper) return;
+
+        // 获取裁剪后的 Canvas (256x256 足够头像用了)
+        const canvas = cropper.getCroppedCanvas({
+            width: 256,
+            height: 256,
+            imageSmoothingEnabled: true,
+            imageSmoothingQuality: 'high',
+        });
+
+        // 转成 Base64
+        avatarBase64 = canvas.toDataURL('image/png');
+        
+        // 更新主界面的预览图
+        const finalImg = document.getElementById('finalPreview');
+        finalImg.src = avatarBase64;
+        finalImg.style.display = 'block';
+        document.getElementById('uploadText').style.display = 'none';
+        
+        // 关闭弹窗
+        closeCropper();
+    }
+
+    // 关闭裁剪弹窗
+    function closeCropper() {
+        document.getElementById('cropperModal').style.display = 'none';
+    }
+
+    // 注册逻辑 (保持不变)
     async function doRegister() {
         const u = document.getElementById("username").value.trim();
         const p = document.getElementById("password").value;
         const errDiv = document.getElementById("err");
         
         errDiv.innerText = "";
-        
         if (!u || !p) return (errDiv.innerText = "昵称和密码不能为空");
 
         const btn = document.querySelector('.btn-submit');
@@ -140,8 +232,8 @@
         const res = await Dreams.apiPost("/api/register", {
             username: u,
             password: p,
-            avatar: avatarBase64,
-            gender: selectedGender // ✨ 传给后端
+            avatar: avatarBase64, // 这里传的是裁剪后的图片
+            gender: selectedGender
         });
 
         if (res.error) {
@@ -149,10 +241,9 @@
             btn.innerText = "立即注册";
             btn.disabled = false;
         } else {
-            // 注册成功，自动登录
             Dreams.setToken(res.token);
             Dreams.setUid(res.uid);
-            location.href = "./conversations.html";
+            location.href = "./home.html"; // 注册成功跳到新版主页
         }
     }
   </script>
