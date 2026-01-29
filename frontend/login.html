@@ -1,81 +1,211 @@
 <!doctype html>
 <html lang="zh">
 <head>
+  <!-- 页面字符集 -->
   <meta charset="UTF-8" />
+
+  <!-- 移动端自适应 -->
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+  <!-- 页面标题 -->
   <title>Dreams - Login</title>
+
+  <!-- 页面样式，仅负责显示 -->
   <style>
-    body{font-family:Arial;background:#f4f4f4;padding:20px;}
-    .card{background:#fff;border:1px solid #ddd;border-radius:12px;padding:16px;max-width:420px;margin:0 auto;}
-    input{width:100%;padding:10px;margin:8px 0;border:1px solid #ccc;border-radius:8px;}
-    button{padding:10px 12px;border:0;border-radius:8px;cursor:pointer;width:100%;}
-    .row{display:flex;gap:10px;}
-    .row button{width:50%;}
-    .small{font-size:12px;color:#666;margin-top:8px;}
-    .err{color:#b00020;margin-top:10px;white-space:pre-wrap;}
+    body {
+      font-family: Arial;
+      background: #f4f4f4;
+      padding: 20px;
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 16px;
+      max-width: 420px;
+      margin: 0 auto;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+
+    button {
+      padding: 10px 12px;
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .row button {
+      width: 50%;
+    }
+
+    .small {
+      font-size: 12px;
+      color: #666;
+      margin-top: 8px;
+    }
+
+    .err {
+      color: #b00020;
+      margin-top: 10px;
+      white-space: pre-wrap;
+    }
   </style>
 </head>
+
 <body>
+
+  <!-- 登录 / 注册卡片 -->
   <div class="card">
     <h2>Dreams</h2>
-    <div class="small">用户名 + 密码登录（首次可注册）</div>
 
-    <input id="username" placeholder="用户名" autocomplete="username" />
-    <input id="password" type="password" placeholder="密码" autocomplete="current-password" />
+    <!-- 页面说明 -->
+    <div class="small">
+      用户名 + 密码登录（首次可注册）
+    </div>
+
+    <!-- 用户名输入框 -->
+    <input
+      id="username"
+      placeholder="用户名"
+      autocomplete="username"
+    />
+
+    <!-- 密码输入框 -->
+    <input
+      id="password"
+      type="password"
+      placeholder="密码"
+      autocomplete="current-password"
+    />
+
+    <!-- 头像上传（注册时使用，可选） -->
     <div class="small">头像（可选）：</div>
-    <input id="avatar" type="file" accept="image/*" />
+    <input
+      id="avatar"
+      type="file"
+      accept="image/*"
+    />
 
+    <!-- 登录 / 注册按钮 -->
     <div class="row">
       <button onclick="doLogin()">登录</button>
       <button onclick="doRegister()">注册</button>
     </div>
 
+    <!-- 错误提示区域 -->
     <div id="err" class="err"></div>
   </div>
 
+  <!-- 引入公共 JS（token、API 封装等） -->
   <script src="./app.js"></script>
+
   <script>
-    // 如果已有 token，直接跳会话列表
-    (async () => {
+    /*
+      页面加载后立即执行
+      如果本地已经有 token，并且 token 有效
+      直接跳转到会话列表页
+    */
+    (async function autoRedirect() {
       const me = await Dreams.apiMe();
-      if (me) location.href = "./conversations.html";
+      if (me) {
+        location.href = "./conversations.html";
+      }
     })();
 
-    async function doLogin(){
+    /*
+      登录逻辑
+    */
+    async function doLogin() {
       document.getElementById("err").innerText = "";
+
       const u = document.getElementById("username").value.trim();
       const p = document.getElementById("password").value;
-      if(!u || !p){ return showErr("请输入用户名和密码"); }
 
-      const d = await Dreams.apiPost("/api/login", { username:u, password:p });
-      if(d.error) return showErr(d.error);
+      // 简单前端校验
+      if (!u || !p) {
+        return showErr("请输入用户名和密码");
+      }
 
+      // 调用后端登录接口
+      const d = await Dreams.apiPost(
+        "/api/login",
+        { username: u, password: p }
+      );
+
+      if (d.error) {
+        return showErr(d.error);
+      }
+
+      // 保存 token 和 uid 到本地
       Dreams.setToken(d.token);
       Dreams.setUid(d.uid);
+
+      // 跳转到会话列表页
       location.href = "./conversations.html";
     }
 
-    async function doRegister(){
+    /*
+      注册逻辑
+    */
+    async function doRegister() {
       document.getElementById("err").innerText = "";
+
       const u = document.getElementById("username").value.trim();
       const p = document.getElementById("password").value;
-      if(!u || !p){ return showErr("请输入用户名和密码"); }
+
+      // 简单前端校验
+      if (!u || !p) {
+        return showErr("请输入用户名和密码");
+      }
 
       let avatarBase64 = null;
+
+      // 如果用户选择了头像，转成 base64
       const file = document.getElementById("avatar").files[0];
-      if(file){
+      if (file) {
         avatarBase64 = await Dreams.fileToBase64(file);
       }
 
-      const d = await Dreams.apiPost("/api/register", { username:u, password:p, avatar: avatarBase64 });
-      if(d.error) return showErr(d.error);
+      // 调用后端注册接口
+      const d = await Dreams.apiPost(
+        "/api/register",
+        {
+          username: u,
+          password: p,
+          avatar: avatarBase64
+        }
+      );
 
+      if (d.error) {
+        return showErr(d.error);
+      }
+
+      // 注册成功后直接保存 token 和 uid
       Dreams.setToken(d.token);
       Dreams.setUid(d.uid);
+
+      // 跳转到会话列表页
       location.href = "./conversations.html";
     }
 
-    function showErr(msg){
+    /*
+      显示错误信息
+    */
+    function showErr(msg) {
       document.getElementById("err").innerText = msg;
     }
   </script>
