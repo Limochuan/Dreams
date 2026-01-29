@@ -6,42 +6,45 @@
   <title>Dreams</title>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <style>
-    /* ================= 基础样式 ================= */
+    /* ================= 基础 & 动画 ================= */
     * { box-sizing: border-box; }
     body { 
       margin: 0; padding: 0; background: #e6e6e6; 
       height: 100vh; display: flex; justify-content: center; align-items: center; overflow: hidden;
-      /* 全局字体：华文仿宋 */
       font-family: "STFangsong", "华文仿宋", "Songti SC", "SimSun", "Microsoft YaHei", serif;
     }
     
+    /* 核心主窗口 */
     .app-window { width: 1300px; height: 850px; background: #fff; border-radius: 8px; box-shadow: 0 0 20px rgba(0,0,0,0.15); display: flex; overflow: hidden; position: relative; }
 
     /* 左侧导航 */
-    .sidebar-nav { width: 68px; background: #2e2e2e; display: flex; flex-direction: column; align-items: center; padding-top: 30px; color: #9d9d9d; }
-    .my-avatar { width: 40px; height: 40px; border-radius: 50%; margin-bottom: 25px; cursor: pointer; border: 2px solid transparent; }
+    .sidebar-nav { width: 68px; background: #2e2e2e; display: flex; flex-direction: column; align-items: center; padding-top: 30px; color: #9d9d9d; z-index: 10; }
+    .my-avatar { width: 40px; height: 40px; border-radius: 50%; margin-bottom: 25px; cursor: pointer; border: 2px solid transparent; transition: border-color 0.3s; }
     .my-avatar:hover { border-color: #fff; }
-    .nav-item { font-size: 24px; margin-bottom: 25px; cursor: pointer; position: relative; }
+    .nav-item { font-size: 24px; margin-bottom: 25px; cursor: pointer; position: relative; transition: color 0.3s; }
     .nav-item:hover { color: #fff; } .nav-item.active { color: #0099ff; }
     .nav-bottom { margin-top: auto; margin-bottom: 20px; font-size: 20px; }
     .nav-badge { position: absolute; top: -5px; right: -5px; width: 8px; height: 8px; background: #ff4d4f; border-radius: 50%; display: none; }
     .nav-badge.show { display: block; }
 
     /* 列表栏 */
-    .sidebar-list { width: 300px; background: #fdfdfd; border-right: 1px solid #e7e7e7; display: flex; flex-direction: column; }
+    .sidebar-list { width: 300px; background: #fdfdfd; border-right: 1px solid #e7e7e7; display: flex; flex-direction: column; z-index: 9;}
     .panel { flex: 1; display: none; flex-direction: column; } .panel.active { display: flex; }
     .search-box { padding: 20px 15px; background: #f7f7f7; display: flex; align-items: center; justify-content: space-between; }
     .search-input-wrap { position: relative; flex: 1; margin-right: 10px; }
-    .search-input { width: 100%; padding: 8px 10px 8px 30px; border: 1px solid #e0e0e0; background: #e9e9e9; border-radius: 4px; outline: none; font-size: 13px; font-family: inherit; }
+    .search-input { width: 100%; padding: 8px 10px 8px 30px; border: 1px solid #e0e0e0; background: #e9e9e9; border-radius: 4px; outline: none; font-size: 13px; font-family: inherit; transition: all 0.3s; }
+    .search-input:focus { background: #fff; border-color: #0099ff; }
     .search-icon { position: absolute; left: 10px; top: 9px; color: #999; font-size: 12px; }
     
-    /* 改造后的创建按钮：只用于建群 */
     .btn-create { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; background: #e9e9e9; border-radius: 4px; cursor: pointer; color: #666; transition: all 0.2s;}
-    .btn-create:hover { background: #d0d0d0; color: #000; }
+    .btn-create:hover { background: #d0d0d0; color: #000; transform: scale(1.05); }
     
     .scroll-area { flex: 1; overflow-y: auto; }
+    /* 自定义滚动条 */
+    .scroll-area::-webkit-scrollbar { width: 6px; }
+    .scroll-area::-webkit-scrollbar-thumb { background: #e0e0e0; border-radius: 3px; }
     
-    .session-item { display: flex; padding: 12px 15px; cursor: pointer; transition: background 0.1s; }
+    .session-item { display: flex; padding: 12px 15px; cursor: pointer; transition: background 0.2s; }
     .session-item:hover { background: #f2f2f2; } .session-item.active { background: #e5f5ff; }
     .session-item.pinned { background: #f7f7f7; border-left: 3px solid #0099ff; }
     .s-avatar { width: 44px; height: 44px; border-radius: 50%; margin-right: 12px; flex-shrink: 0; }
@@ -49,19 +52,21 @@
     .s-top { display: flex; justify-content: space-between; margin-bottom: 4px; }
     .s-name { font-size: 16px; color: #000; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
     .unread-badge { background: #ff4d4f; color: white; border-radius: 10px; padding: 0 6px; font-size: 10px; height: 16px; line-height: 16px; min-width: 16px; text-align: center; margin-left: 5px;}
-    .friend-item { display: flex; align-items: center; padding: 10px 15px; cursor: pointer; } .friend-item:hover { background: #f2f2f2; }
+    .friend-item { display: flex; align-items: center; padding: 10px 15px; cursor: pointer; transition: background 0.2s; } .friend-item:hover { background: #f2f2f2; }
     .f-name { font-size: 16px; margin-left: 12px; font-weight: 500; }
 
     /* 聊天区 */
-    .chat-area { flex: 1; display: flex; flex-direction: column; background: #f5f5f5; min-width: 0; }
+    .chat-area { flex: 1; display: flex; flex-direction: column; background: #f5f5f5; min-width: 0; z-index: 8; position: relative; }
     .chat-header { height: 60px; border-bottom: 1px solid #e7e7e7; display: flex; justify-content: space-between; align-items: center; padding: 0 25px; background: #f5f5f5; }
-    .chat-title { font-size: 20px; font-weight: bold; color: #000; cursor: default; }
+    .chat-title { font-size: 20px; font-weight: bold; color: #000; cursor: default; transition: color 0.2s;}
     .chat-title.editable { cursor: pointer; } .chat-title.editable:hover { color: #0099ff; text-decoration: underline; }
     .header-icons { display: flex; gap: 20px; color: #333; font-size: 18px; cursor: pointer; }
-    .messages-box { flex: 1; overflow-y: auto; padding: 20px 30px; display: flex; flex-direction: column; gap: 20px; }
+    .header-icon-btn { transition: color 0.2s; } .header-icon-btn:hover { color: #0099ff; }
     
-    /* 消息气泡 */
-    .msg-row { display: flex; align-items: flex-start; gap: 12px; }
+    .messages-box { flex: 1; overflow-y: auto; padding: 20px 30px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
+    
+    .msg-row { display: flex; align-items: flex-start; gap: 12px; opacity: 0; animation: fadeIn 0.3s forwards; }
+    @keyframes fadeIn { to { opacity: 1; } }
     .msg-row.me { flex-direction: row-reverse; }
     .msg-bubble-wrap { max-width: 60%; display: flex; flex-direction: column; align-items: flex-start; }
     .msg-row.me .msg-bubble-wrap { align-items: flex-end; }
@@ -76,24 +81,34 @@
     }
     .role-owner { background: #f0ad4e; } .role-admin { background: #5bc0de; }
 
-    .msg-avatar { width: 36px; height: 36px; border-radius: 50%; cursor: pointer; }
+    .msg-avatar { width: 36px; height: 36px; border-radius: 50%; cursor: pointer; transition: transform 0.2s; }
+    .msg-avatar:hover { transform: scale(1.1); }
     .bubble { padding: 10px 14px; background: #fff; border-radius: 10px; font-size: 16px; line-height: 1.6; color: #000; box-shadow: 0 1px 2px rgba(0,0,0,0.05); word-break: break-word; }
     .msg-row.me .bubble { background: #0099ff; color: #fff; border-top-right-radius: 2px; } .msg-row:not(.me) .bubble { border-top-left-radius: 2px; }
-    .bubble img { max-width: 200px; border-radius: 4px; cursor: pointer; }
+    .bubble img { max-width: 200px; border-radius: 4px; cursor: pointer; transition: opacity 0.2s; } .bubble img:hover { opacity: 0.9; }
     
     /* 输入框 */
     .input-box { height: 170px; border-top: 1px solid #e7e7e7; background: #fff; display: flex; flex-direction: column; }
     .toolbar { padding: 10px 20px; display: flex; gap: 20px; color: #666; font-size: 20px; align-items: center; }
     .tool-icon { cursor: pointer; transition: color 0.2s; } .tool-icon:hover { color: #0099ff; }
     textarea { flex: 1; border: none; outline: none; padding: 0 20px; font-size: 16px; font-family: inherit; resize: none; }
-    .btn-send { padding: 6px 25px; background: #0099ff; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-family: inherit;}
+    .btn-send { padding: 6px 25px; background: #0099ff; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-family: inherit; transition: background 0.2s;}
+    .btn-send:hover { background: #0088cc; }
     .send-area { padding: 10px 20px 20px; display: flex; justify-content: flex-end; }
 
-    /* 成员栏 */
-    .member-sidebar { width: 200px; background: #fff; border-left: 1px solid #e7e7e7; display: none; flex-direction: column; }
-    .member-header { height: 50px; border-bottom: 1px solid #f0f0f0; padding: 0 15px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; color: #666; }
+    /* ✨✨✨ 侧边成员栏 (修复：丝滑动画 + 私聊隐藏) ✨✨✨ */
+    .member-sidebar { 
+        width: 0; /* 默认宽度为 0，实现隐藏 */
+        background: #fff; border-left: 1px solid #e7e7e7; 
+        display: flex; flex-direction: column; 
+        transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); /* 丝滑过渡 */
+        overflow: hidden; /* 防止内容溢出 */
+    }
+    .member-sidebar.open { width: 220px; } /* 展开时的宽度 */
+
+    .member-header { height: 50px; border-bottom: 1px solid #f0f0f0; padding: 0 15px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; color: #666; white-space: nowrap; }
     .member-scroll { flex: 1; overflow-y: auto; padding: 5px 0; }
-    .member-item { display: flex; align-items: center; padding: 8px 15px; cursor: pointer; position: relative; }
+    .member-item { display: flex; align-items: center; padding: 8px 15px; cursor: pointer; position: relative; white-space: nowrap;}
     .member-item:hover { background: #f5f5f5; }
     .btn-kick { display: none; position: absolute; right: 10px; color: #ff4d4f; font-size: 12px; padding: 2px 5px; border: 1px solid #ff4d4f; border-radius: 4px; z-index: 10; background: #fff; }
     .member-item:hover .btn-kick { display: block; } 
@@ -102,35 +117,62 @@
     .badge { font-size: 10px; padding: 1px 4px; border-radius: 2px; color: #fff; margin-left: 5px; transform: scale(0.9); font-family: inherit; }
     .badge-owner { background: #f0ad4e; } .badge-admin { background: #5bc0de; }
 
-    /* 菜单 & 弹窗 */
-    .context-menu { display: none; position: absolute; background: white; border-radius: 6px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); z-index: 5000; min-width: 120px;}
+    /* 菜单 & 弹窗通用 */
+    .context-menu { display: none; position: absolute; background: white; border-radius: 6px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); z-index: 5000; min-width: 120px; animation: popIn 0.1s ease-out; }
     .ctx-item { padding: 10px 15px; font-size: 14px; color: #333; cursor: pointer; display: flex; align-items: center; gap: 8px;}
     .ctx-item:hover { background: #f5f5f5; color: #0099ff; }
     .lang-options { display: none; background: #f9f9f9; } .lang-options.show { display: block; }
     .lang-item { padding: 8px 35px; font-size: 13px; color: #666; cursor: pointer; } .lang-item:hover { color: #0099ff; background: #eee; }
     
-    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 2000; justify-content: center; align-items: center; }
-    .profile-card { background: white; width: 340px; border-radius: 12px; overflow: hidden; box-shadow: 0 15px 40px rgba(0,0,0,0.3); position: relative; font-family: inherit; }
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 2000; justify-content: center; align-items: center; opacity: 0; transition: opacity 0.2s; }
+    .modal-overlay.show { opacity: 1; }
+    
+    .profile-card { background: white; width: 340px; border-radius: 12px; overflow: hidden; box-shadow: 0 15px 40px rgba(0,0,0,0.3); position: relative; font-family: inherit; transform: scale(0.95); transition: transform 0.2s; }
+    .modal-overlay.show .profile-card { transform: scale(1); }
+    
     .p-banner { height: 100px; background: linear-gradient(135deg, #00c6ff, #0072ff); }
     .p-close { position: absolute; top: 10px; right: 15px; color: #fff; cursor: pointer; font-size: 20px; }
     .p-avatar-wrap { position: absolute; top: 60px; left: 20px; padding: 4px; background: white; border-radius: 50%; }
     .p-avatar { width: 70px; height: 70px; border-radius: 50%; object-fit: cover; background: #eee;}
     .p-info { padding: 45px 20px 20px; }
-    .btn-action { width: 100%; padding: 10px; border: none; border-radius: 6px; background: #0099ff; color: white; font-weight: bold; cursor: pointer; font-family: inherit;}
+    .btn-action { width: 100%; padding: 10px; border: none; border-radius: 6px; background: #0099ff; color: white; font-weight: bold; cursor: pointer; font-family: inherit; transition: background 0.2s;}
+    .btn-action:hover { background: #0088cc; }
     .empty-state { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #ccc; }
     .empty-icon { font-size: 60px; margin-bottom: 20px; color: #e0e0e0; }
 
-    /* ✨✨✨ Toast 消息提示样式 ✨✨✨ */
-    #toast {
-        visibility: hidden; min-width: 250px; background-color: #333; color: #fff; text-align: center; border-radius: 4px; padding: 16px;
-        position: fixed; z-index: 9999; left: 50%; top: 30px; transform: translateX(-50%); font-size: 14px; opacity: 0; transition: opacity 0.3s;
-    }
-    #toast.show { visibility: visible; opacity: 1; }
+    /* Toast 提示 */
+    #toast { visibility: hidden; min-width: 250px; background-color: #333; color: #fff; text-align: center; border-radius: 4px; padding: 12px 20px; position: fixed; z-index: 9999; left: 50%; top: 30px; transform: translateX(-50%); font-size: 14px; opacity: 0; transition: opacity 0.3s, top 0.3s; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    #toast.show { visibility: visible; opacity: 1; top: 50px; }
+
+    /* ✨✨✨ 自定义输入框弹窗 (Input Modal) ✨✨✨ */
+    .input-modal-box { background: white; width: 320px; border-radius: 10px; padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); transform: scale(0.9); transition: transform 0.2s; font-family: inherit; }
+    .modal-overlay.show .input-modal-box { transform: scale(1); }
+    .input-modal-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #333; }
+    .input-modal-field { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; outline: none; margin-bottom: 20px; font-family: inherit; }
+    .input-modal-field:focus { border-color: #0099ff; }
+    .input-modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+    .btn-cancel { padding: 8px 16px; border: 1px solid #ddd; background: #fff; border-radius: 4px; cursor: pointer; color: #666; font-family: inherit; }
+    .btn-cancel:hover { background: #f5f5f5; }
+    .btn-confirm { padding: 8px 16px; border: none; background: #0099ff; color: white; border-radius: 4px; cursor: pointer; font-family: inherit; }
+    .btn-confirm:hover { background: #0088cc; }
+
+    @keyframes popIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
   </style>
 </head>
 <body onclick="hideAllMenus()">
 
 <div id="toast"></div>
+
+<div id="inputModal" class="modal-overlay">
+    <div class="input-modal-box" onclick="event.stopPropagation()">
+        <div class="input-modal-title" id="inputModalTitle">标题</div>
+        <input class="input-modal-field" id="inputModalValue" type="text">
+        <div class="input-modal-actions">
+            <button class="btn-cancel" onclick="closeInputModal()">取消</button>
+            <button class="btn-confirm" id="btnInputConfirm">确定</button>
+        </div>
+    </div>
+</div>
 
 <div class="app-window">
     <div class="sidebar-nav">
@@ -170,9 +212,10 @@
             <div class="chat-header">
                 <div class="chat-title" id="chatTitle" onclick="editGroupTitle()"></div>
                 <div class="header-icons">
-                    <label for="groupAvatarInput" id="btnGroupAvatar" style="display:none; cursor:pointer" title="修改群头像"><i class="fas fa-camera tool-icon"></i></label>
+                    <label for="groupAvatarInput" id="btnGroupAvatar" style="display:none; cursor:pointer" title="修改群头像"><i class="fas fa-camera header-icon-btn"></i></label>
                     <input type="file" id="groupAvatarInput" accept="image/*" style="display:none" onchange="uploadGroupAvatar(this)">
-                    <i class="fas fa-ellipsis-h tool-icon" onclick="toggleMembers()"></i>
+                    
+                    <i class="fas fa-ellipsis-h header-icon-btn" id="btnToggleMember" onclick="toggleMembers()"></i>
                 </div>
             </div>
             <div class="messages-box" id="msgBox"></div>
@@ -213,9 +256,10 @@
             ctx_pin: "置顶", ctx_unpin: "取消置顶", ctx_mute: "免打扰", ctx_unmute: "开启提醒",
             role_owner: "群主", role_admin: "管理", kick: "移除",
             btn_self: "自己", btn_msg: "发消息", btn_add: "加好友",
-            edit_title_prompt: "修改群名称：", confirm_kick: "确定要移除该成员吗？",
-            group_avatar_updated: "群头像已更新", input_uid: "输入用户 UID:",
-            user_not_found: "用户不存在", create_group_prompt: "请输入新群聊名称："
+            edit_title_prompt: "修改群名称", confirm_kick: "确定要移除该成员吗？",
+            group_avatar_updated: "群头像已更新", input_uid: "添加成员 (输入UID)",
+            user_not_found: "用户不存在", create_group_prompt: "创建新群聊",
+            input_placeholder_name: "请输入名称...", input_placeholder_uid: "请输入用户 UID..."
         },
         id: {
             empty_chat: "Tidak ada obrolan", send_btn: "Kirim", menu_lang: "Bahasa", menu_exit: "Keluar",
@@ -223,9 +267,10 @@
             ctx_pin: "Sematkan", ctx_unpin: "Lepas Sematan", ctx_mute: "Bisukan", ctx_unmute: "Bunyikan",
             role_owner: "Pemilik", role_admin: "Admin", kick: "Hapus",
             btn_self: "Anda", btn_msg: "Pesan", btn_add: "Tambah",
-            edit_title_prompt: "Ubah Nama Grup:", confirm_kick: "Hapus anggota ini?",
-            group_avatar_updated: "Foto grup diperbarui", input_uid: "Masukkan UID:",
-            user_not_found: "Pengguna tidak ditemukan", create_group_prompt: "Masukkan nama grup:"
+            edit_title_prompt: "Ubah Nama Grup", confirm_kick: "Hapus anggota ini?",
+            group_avatar_updated: "Foto grup diperbarui", input_uid: "Tambah Anggota (UID)",
+            user_not_found: "Pengguna tidak ditemukan", create_group_prompt: "Buat Grup Baru",
+            input_placeholder_name: "Nama...", input_placeholder_uid: "UID..."
         },
         en: {
             empty_chat: "No chat selected", send_btn: "Send", menu_lang: "Language", menu_exit: "Exit",
@@ -233,9 +278,10 @@
             ctx_pin: "Pin", ctx_unpin: "Unpin", ctx_mute: "Mute", ctx_unmute: "Unmute",
             role_owner: "Owner", role_admin: "Admin", kick: "Kick",
             btn_self: "You", btn_msg: "Message", btn_add: "Add",
-            edit_title_prompt: "Edit Group Name:", confirm_kick: "Remove this member?",
-            group_avatar_updated: "Group avatar updated", input_uid: "Enter UID:",
-            user_not_found: "User not found", create_group_prompt: "Enter group name:"
+            edit_title_prompt: "Edit Group Name", confirm_kick: "Remove this member?",
+            group_avatar_updated: "Group avatar updated", input_uid: "Add Member (UID)",
+            user_not_found: "User not found", create_group_prompt: "Create New Group",
+            input_placeholder_name: "Name...", input_placeholder_uid: "UID..."
         }
     };
 
@@ -251,12 +297,51 @@
     let me, ws, currentCid, currentType, currentRole, ctxCid;
     let currentGroupMembers = {}; 
 
-    // ✨✨✨ 全新的 Toast 提示函数 ✨✨✨
+    // ✨ 通用工具函数
     function showToast(msg) {
         const x = document.getElementById("toast");
         x.innerText = msg;
         x.className = "show";
         setTimeout(function(){ x.className = x.className.replace("show", ""); }, 3000);
+    }
+
+    // ✨ 自定义输入弹窗逻辑
+    let inputModalResolve = null;
+    function openInputModal(title, placeholder) {
+        return new Promise((resolve) => {
+            const t = translations[curLang];
+            document.getElementById("inputModalTitle").innerText = title;
+            const input = document.getElementById("inputModalValue");
+            input.value = "";
+            input.placeholder = placeholder || "";
+            document.getElementById("inputModal").style.display = "flex";
+            // 延时添加 show 类以触发动画
+            setTimeout(() => document.getElementById("inputModal").classList.add("show"), 10);
+            input.focus();
+            
+            inputModalResolve = resolve;
+            
+            // 绑定确定按钮
+            document.getElementById("btnInputConfirm").onclick = () => {
+                const val = input.value.trim();
+                closeInputModal();
+                if(val) resolve(val); else resolve(null);
+            };
+            // 绑定回车键
+            input.onkeydown = (e) => {
+                if(e.key === 'Enter') {
+                    const val = input.value.trim();
+                    closeInputModal();
+                    if(val) resolve(val); else resolve(null);
+                }
+            };
+        });
+    }
+    
+    function closeInputModal() {
+        document.getElementById("inputModal").classList.remove("show");
+        setTimeout(() => document.getElementById("inputModal").style.display = "none", 200);
+        if(inputModalResolve) inputModalResolve(null);
     }
 
     (async function init() {
@@ -316,10 +401,17 @@
         const titleEl = document.getElementById("chatTitle");
         titleEl.innerText = c.title;
         if(currentRole === 'owner') { titleEl.classList.add("editable"); titleEl.title="Edit Name"; } else { titleEl.classList.remove("editable"); titleEl.title=""; }
-        document.getElementById("btnGroupAvatar").style.display = (currentRole==='owner' && c.type==='group') ? 'block' : 'none';
+        
+        // ✨ 修复：私聊时隐藏群头像上传按钮，且隐藏右侧菜单按钮
+        const isGroup = (c.type === 'group');
+        document.getElementById("btnGroupAvatar").style.display = (currentRole==='owner' && isGroup) ? 'block' : 'none';
+        document.getElementById("btnToggleMember").style.display = isGroup ? 'block' : 'none'; // 私聊隐藏 ... 按钮
+
+        // 切换时强制关闭侧边栏
+        document.getElementById("memberSidebar").classList.remove("open");
 
         currentGroupMembers = {};
-        if(c.type === 'group') {
+        if(isGroup) {
             await loadMembers(c.id);
         }
 
@@ -332,9 +424,6 @@
 
         if(ws) ws.close();
         ws = Dreams.connectChat(c.id, (d)=>{ if(d.type==='message'){appendMessage(d);Dreams.apiPost(`/api/conversations/${c.id}/read`,{});} });
-        
-        const side = document.getElementById("memberSidebar");
-        if(c.type==='group') { side.style.display='flex'; } else { side.style.display='none'; }
     }
 
     async function loadMembers(cid) {
@@ -369,12 +458,35 @@
         });
     }
 
+    // ✨ 使用新的自定义弹窗
     async function editGroupTitle() {
         if(currentRole !== 'owner') return;
         const t = translations[curLang];
-        const newT = prompt(t.edit_title_prompt, document.getElementById("chatTitle").innerText);
-        if(newT) { await Dreams.apiPost(`/api/conversations/${currentCid}/update`, {title: newT}); document.getElementById("chatTitle").innerText = newT; refreshConversations(); }
+        const newT = await openInputModal(t.edit_title_prompt, document.getElementById("chatTitle").innerText);
+        if(newT) { 
+            await Dreams.apiPost(`/api/conversations/${currentCid}/update`, {title: newT}); 
+            document.getElementById("chatTitle").innerText = newT; 
+            refreshConversations(); 
+        }
     }
+    
+    async function createNewGroup() { 
+        const t = translations[curLang];
+        // ✨ 只问群名，不再问是私聊还是群聊
+        const n = await openInputModal(t.create_group_prompt, t.input_placeholder_name);
+        if(n) Dreams.apiPost("/api/conversations/group",{title:n}).then(refreshConversations); 
+    }
+
+    async function addGroupMember() { 
+        if(currentCid){ 
+            const t = translations[curLang];
+            const u = await openInputModal(t.input_uid, t.input_placeholder_uid); 
+            if(u) Dreams.apiPost(`/api/conversations/${currentCid}/members`,{new_uid:u}).then(r=>{
+                if(r.error) showToast(r.error); else loadMembers(currentCid);
+            }); 
+        } 
+    }
+
     async function uploadGroupAvatar(input) {
         if(!input.files[0]) return;
         const b64 = await Dreams.fileToBase64(input.files[0]);
@@ -403,15 +515,13 @@
         const act=a==='pin'?(isSet?'unpin':'pin'):(isSet?'unmute':'mute'); 
         await Dreams.apiPost(`/api/conversations/${ctxCid}/setting`,{action:act}); refreshConversations(); 
     }
-    async function addGroupMember() { if(currentCid){ const u=prompt(translations[curLang].input_uid); if(u)Dreams.apiPost(`/api/conversations/${currentCid}/members`,{new_uid:u}).then(r=>{if(r.error)showToast(r.error);else loadMembers(currentCid)}); } }
     
-    // ✨✨✨ 改造后的建群功能：只问名字，不问类型 ✨✨✨
-    function createNewGroup() { 
-        const t = translations[curLang];
-        const n = prompt(t.create_group_prompt); 
-        if(n) Dreams.apiPost("/api/conversations/group",{title:n}).then(refreshConversations); 
+    // ✨ 丝滑切换侧边栏
+    function toggleMembers() { 
+        const s = document.getElementById("memberSidebar"); 
+        s.classList.toggle("open"); // 使用 class 控制 transition 动画
     }
-
+    
     const fileToBase64 = (file) => new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
@@ -459,13 +569,16 @@
         const res = await Dreams.apiGet(`/api/users/${uid}/profile`);
         const t = translations[curLang];
         
-        // ✨✨✨ 优雅的 Toast 提示 ✨✨✨
         if (!res || res.error) {
             showToast(t.user_not_found || "查无此人");
             return;
         }
 
-        document.getElementById("profileModal").style.display="flex";
+        // 弹窗前先显示遮罩，再加 show 类触发动画
+        const modal = document.getElementById("profileModal");
+        modal.style.display="flex";
+        setTimeout(()=>modal.classList.add("show"), 10);
+
         document.getElementById("pName").innerText=res.username; document.getElementById("pUid").innerText="UID: "+res.uid;
         document.getElementById("pAvatar").src=res.avatar||`https://ui-avatars.com/api/?background=random&name=${res.username}`;
         const act=document.getElementById("pAction");
@@ -473,9 +586,16 @@
         else if(res.is_friend) { act.innerHTML=`<button class="btn-action">${t.btn_msg}</button>`; act.onclick=()=>{closeProfile();createPrivateChat(res.uid);} }
         else { act.innerHTML=`<button class="btn-action">${t.btn_add}</button>`; act.onclick=async()=>{await Dreams.apiPost("/api/friends/add",{friend_uid:res.uid});showProfile(uid);} }
     }
-    function closeProfile() { document.getElementById("profileModal").style.display="none"; }
+    function closeProfile() { 
+        const modal = document.getElementById("profileModal");
+        modal.classList.remove("show");
+        setTimeout(()=>modal.style.display="none", 200);
+    }
     async function createPrivateChat(uid) { const r=await Dreams.apiPost("/api/conversations/private",{peer_uid:uid}); if(!r.error) {switchTab('chat');refreshConversations();} }
-    function toggleMembers() { const s=document.getElementById("memberSidebar"); s.style.display=s.style.display==='none'?'flex':'none'; }
+    function toggleMembers() { 
+        const s = document.getElementById("memberSidebar"); 
+        s.classList.toggle("open");
+    }
 </script>
 </body>
 </html>
