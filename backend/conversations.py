@@ -19,11 +19,9 @@ def create_private(uid1: int, uid2: int) -> int:
             if existing:
                 return existing["id"]
 
-            # 创建新会话
             cur.execute("INSERT INTO dreams_conversations (type) VALUES ('private')")
             cid = cur.lastrowid
             
-            # 添加成员
             cur.execute("INSERT INTO dreams_conversation_members (conversation_id, uid) VALUES (%s, %s), (%s, %s)", (cid, uid1, cid, uid2))
             conn.commit()
             return cid
@@ -42,12 +40,12 @@ def create_group(owner_uid: int, title: str) -> int:
     finally:
         conn.close()
 
-# ✨ 核心修改：智能列表 (包含未读数、置顶、私聊对方名字)
+# ✨ 核心升级：智能列表查询
 def list_conversations(uid: int) -> List[Dict]:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            # 这个 SQL 比较复杂，做了三件事：
+            # 这个 SQL 比较复杂，它做了三件事：
             # 1. 查出会话基本信息 + 我在群里的设置 (置顶/免打扰/上次阅读时间)
             # 2. 统计未读消息数 (count messages > last_read_at)
             # 3. 如果是私聊，查出对方的 username 和 avatar
@@ -92,14 +90,13 @@ def list_conversations(uid: int) -> List[Dict]:
             cur.execute(sql, (uid,))
             rows = cur.fetchall()
             
-            # 后处理：修正标题和头像
             results = []
             for r in rows:
                 display_title = r["title"]
                 display_avatar = None
                 
+                # 如果是私聊，且标题为空，就显示对方名字
                 if r["type"] == 'private':
-                    # 如果是私聊，且标题为空，就显示对方名字
                     display_title = r["peer_name"] or "未知用户"
                     display_avatar = r["peer_avatar"]
                 
@@ -123,7 +120,6 @@ def add_member(operator_uid: int, cid: int, new_uid: int):
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            # 简单检查权限 (这里省略，默认群成员都可以拉人)
             cur.execute("INSERT IGNORE INTO dreams_conversation_members (conversation_id, uid) VALUES (%s, %s)", (cid, new_uid))
             conn.commit()
     finally:
