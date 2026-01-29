@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from init_db import init_db
+from db import get_conn
 from auth import (
     register as reg_user, 
     login as login_user, 
@@ -75,6 +76,7 @@ def require_uid_from_token(token: str) -> int:
 # =========================
 # Auth API
 # =========================
+
 @app.post("/api/register")
 def api_register(payload: dict):
     try:
@@ -82,6 +84,7 @@ def api_register(payload: dict):
             username=payload.get("username", "").strip(),
             password=payload.get("password", ""),
             avatar=payload.get("avatar"),
+            gender=payload.get("gender", "secret") # 接收性别
         )
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -115,8 +118,80 @@ def api_me(token: str):
 
 
 # =========================
+# 用户资料与好友 API (新功能)
+# =========================
+
+@app.get("/api/users/{target_uid}/profile")
+def api_get_user_profile(target_uid: int, token: str):
+    try:
+        my_uid = require_uid_from_token(token)
+        
+        conn = get_conn()
+        try:
+            with conn.cursor() as cur:
+                # 1. 查询目标用户信息
+                cur.execute(
+                    "SELECT id, username, avatar, gender, created_at FROM dreams_users WHERE id=%s",
+                    (target_uid,)
+                )
+                user = cur.fetchone()
+                if not user:
+                    return JSONResponse({"error": "User not found"}, status_code=404)
+                
+                # 2. 查询是否已经是好友
+                cur.execute(
+                    "SELECT 1 FROM dreams_friends WHERE uid=%s AND friend_uid=%s",
+                    (my_uid, target_uid)
+                )
+                is_friend = cur.fetchone() is not None
+
+                # 3. 格式化注册时间
+                created_at_str = user["created_at"].strftime("%Y-%m-%d") if user["created_at"] else "未知"
+
+                return {
+                    "uid": user["id"],
+                    "username": user["username"],
+                    "avatar": user["avatar"],
+                    "gender": user["gender"],
+                    "created_at": created_at_str,
+                    "is_friend": is_friend,
+                    "is_me": (my_uid == target_uid)
+                }
+        finally:
+            conn.close()
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.post("/api/friends/add")
+def api_add_friend(payload: dict):
+    try:
+        uid = require_uid_from_token(payload.get("token", ""))
+        friend_uid = int(payload.get("friend_uid"))
+
+        if uid == friend_uid:
+            return JSONResponse({"error": "不能添加自己为好友"}, status_code=400)
+
+        conn = get_conn()
+        try:
+            with conn.cursor() as cur:
+                # 双向添加好友
+                cur.execute(
+                    "INSERT IGNORE INTO dreams_friends (uid, friend_uid) VALUES (%s, %s), (%s, %s)",
+                    (uid, friend_uid, friend_uid, uid)
+                )
+                conn.commit()
+            return {"ok": True}
+        finally:
+            conn.close()
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+# =========================
 # Conversations API
 # =========================
+
 @app.get("/api/conversations")
 def api_list_conversations(token: str):
     try:
@@ -162,6 +237,7 @@ def api_add_member(conversation_id: int, payload: dict):
 # =========================
 # Messages API
 # =========================
+
 @app.get("/api/conversations/{conversation_id}/messages")
 def api_list_messages(conversation_id: int, token: str, limit: int = 50):
     try:
@@ -174,30 +250,30 @@ def api_list_messages(conversation_id: int, token: str, limit: int = 50):
 
 
 # =========================
-# WebSocket (✨ 核心修改)
+# WebSocket
 # =========================
+
 @app.websocket("/ws/{conversation_id}")
 async def ws_chat(
     ws: WebSocket, 
     conversation_id: int,
-    token: str = Query(...)  # URL 参数带 token
+    token: str = Query(...)
 ):
-    # 1. 鉴权
     uid = get_uid_by_token(token)
+    
     if not uid or not is_member(uid, conversation_id):
         await ws.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    # 2. 建立连接
     await ws.accept()
     await ws_manager.join(conversation_id, ws, uid)
 
-    # ✨ 提前查好当前用户的信息，方便发消息时带上头像
+    # 查用户信息，用于发消息时携带
     current_user = get_user_by_id(uid)
     sender_avatar = current_user["avatar"] if current_user else None
     sender_username = current_user["username"] if current_user else f"User {uid}"
 
-    # 3. 广播加入信息
+    # 广播 Join
     await ws_manager.broadcast(conversation_id, {
         "type": "system",
         "event": "join",
@@ -217,17 +293,16 @@ async def ws_chat(
             if not content:
                 continue
 
-            # 存库
+            # 存消息
             save_message(conversation_id, uid, content)
 
-            # ✨ 4. 广播消息（带上头像和名字）
+            # 广播消息（带头像和名字）
             await ws_manager.broadcast(conversation_id, {
                 "type": "message",
                 "conversation_id": conversation_id,
                 "sender_uid": uid,
                 "content": content,
                 "device": detect_device(ws),
-                # 新增字段
                 "sender_avatar": sender_avatar,
                 "sender_username": sender_username
             })
@@ -236,75 +311,3 @@ async def ws_chat(
         pass
     finally:
         ws_manager.leave(conversation_id, ws)
-
-# ... (保持前面的代码不变) ...
-
-# =========================
-# ✨ 新增：用户资料与好友 API
-# =========================
-
-@app.get("/api/users/{target_uid}/profile")
-def api_get_user_profile(target_uid: int, token: str):
-    try:
-        my_uid = require_uid_from_token(token)
-        
-        conn = get_conn()
-        try:
-            with conn.cursor() as cur:
-                # 1. 查询目标用户信息
-                cur.execute(
-                    "SELECT id, username, avatar, gender, created_at FROM dreams_users WHERE id=%s",
-                    (target_uid,)
-                )
-                user = cur.fetchone()
-                if not user:
-                    return JSONResponse({"error": "User not found"}, status_code=404)
-                
-                # 2. 查询是否已经是好友
-                cur.execute(
-                    "SELECT 1 FROM dreams_friends WHERE uid=%s AND friend_uid=%s",
-                    (my_uid, target_uid)
-                )
-                is_friend = cur.fetchone() is not None
-
-                # 3. 格式化注册时间
-                created_at_str = user["created_at"].strftime("%Y-%m-%d") if user["created_at"] else "未知"
-
-                return {
-                    "uid": user["id"],
-                    "username": user["username"],
-                    "avatar": user["avatar"],
-                    "gender": user["gender"],
-                    "created_at": created_at_str,
-                    "is_friend": is_friend,
-                    "is_me": (my_uid == target_uid) # 标记是不是我自己
-                }
-        finally:
-            conn.close()
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
-
-
-@app.post("/api/friends/add")
-def api_add_friend(payload: dict):
-    try:
-        uid = require_uid_from_token(payload.get("token", ""))
-        friend_uid = int(payload.get("friend_uid"))
-
-        if uid == friend_uid:
-            return JSONResponse({"error": "不能添加自己为好友"}, status_code=400)
-
-        conn = get_conn()
-        try:
-            with conn.cursor() as cur:
-                # 双向添加好友 (你加他，他也加你)
-                cur.execute(
-                    "INSERT IGNORE INTO dreams_friends (uid, friend_uid) VALUES (%s, %s), (%s, %s)",
-                    (uid, friend_uid, friend_uid, uid)
-                )
-                conn.commit()
-            return {"ok": True}
-        finally:
-            conn.close()
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
