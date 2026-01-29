@@ -8,7 +8,7 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   
   <style>
-    /* ================= 全局样式 (保持不变) ================= */
+    /* ... (基础样式保持不变) ... */
     body {
       margin: 0; padding: 0;
       background: linear-gradient(135deg, #eef2f3 0%, #8e9eab 100%);
@@ -50,137 +50,80 @@
     .gender-btn.active {
         background: #e6f7ff; border-color: #1890ff; color: #1890ff; font-weight: bold;
     }
-    
     .btn-submit {
         width: 100%; padding: 12px; border: none; border-radius: 8px;
         background: #007bff; color: white; font-size: 16px; cursor: pointer;
         font-weight: bold; margin-bottom: 15px;
     }
     .btn-submit:hover { background: #0056b3; }
-    
     .link { color: #007bff; text-decoration: none; font-size: 14px; }
     .err { color: #b00020; font-size: 13px; margin-bottom: 10px; min-height: 18px;}
 
     /* =========================================
-       ✨ QQ 风格裁剪弹窗 (全新重写)
+       ✨ QQ 风格裁剪弹窗 (修正版)
        ========================================= */
     .qq-modal-overlay {
-        display: none;
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.5); /* 半透明背景遮罩 */
-        z-index: 999;
+        display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.6); z-index: 999;
         justify-content: center; align-items: center;
     }
-
     .qq-cropper-box {
         width: 420px; background: #fff; border-radius: 8px;
         box-shadow: 0 8px 24px rgba(0,0,0,0.2);
         overflow: hidden; display: flex; flex-direction: column;
     }
-
-    /* 1. 标题栏 */
     .qq-cropper-header {
-        height: 50px; padding: 0 20px;
-        display: flex; justify-content: space-between; align-items: center;
-        border-bottom: 1px solid #eee;
-        font-size: 16px; color: #333;
+        height: 50px; padding: 0 20px; display: flex; justify-content: space-between; align-items: center;
+        border-bottom: 1px solid #eee; font-size: 16px; color: #333;
     }
     .btn-close { cursor: pointer; font-size: 20px; color: #999; }
-    .btn-close:hover { color: #333; }
-
-    /* 2. 图片内容区 */
+    
     .qq-cropper-body {
-        height: 320px; background: #f2f2f2; position: relative;
-        display: flex; justify-content: center; align-items: center;
-        overflow: hidden;
-    }
-    /* 隐藏 Cropper 默认的裁剪框虚线 */
-    .cropper-view-box, .cropper-face {
-        outline: none !important;
-        background: none !important;
+        height: 320px; background: #333; /* 深色背景衬托图片 */
+        position: relative; overflow: hidden;
     }
     
-    /* ✨ 核心魔法：圆形遮罩层 */
-    .qq-cropper-mask {
-        position: absolute;
-        top: 50%; left: 50%;
-        width: 260px; height: 260px; /* 圆形可视区域大小 */
-        transform: translate(-50%, -50%);
-        border-radius: 50%;
-        /* 用一个巨大的半透明阴影来遮挡外部区域 */
-        box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
-        pointer-events: none; /* 让鼠标事件穿透它，传递给底下的图片 */
-        z-index: 10;
-        border: 2px solid rgba(255, 255, 255, 0.7); /* 加个白边更像 QQ */
+    /* ✨ 核心 CSS 修改：让 Cropper 的选框变圆，并去掉多余的点 */
+    .cropper-view-box {
+        border-radius: 50%; /* 变成圆形 */
+        outline: 2px solid #fff; /* QQ 同款白边 */
+        box-shadow: 0 0 0 1px rgba(0,0,0,0.1);
     }
+    .cropper-face { background-color: transparent !important; } /* 选框内部透明 */
+    .cropper-line, .cropper-point { display: none; } /* 隐藏原来的矩形拖拽点 */
+    .cropper-modal { opacity: 0.5; background-color: #000; } /* 外部遮罩浓度 */
 
-    /* 3. 底部操作栏 */
-    .qq-cropper-footer {
-        padding: 15px 20px; background: #fff;
-    }
+    /* 底部操作栏 */
+    .qq-cropper-footer { padding: 15px 20px; background: #fff; }
+    .zoom-control { display: flex; align-items: center; gap: 15px; color: #666; margin-bottom: 20px; }
+    .zoom-icon { font-size: 18px; cursor: pointer; }
+    input[type=range] { flex: 1; height: 4px; cursor: pointer; }
     
-    /* 缩放控制条 */
-    .zoom-control {
-        display: flex; align-items: center; gap: 15px; color: #666; margin-bottom: 20px;
-    }
-    .zoom-icon { font-size: 18px; }
-    
-    /* 自定义滑动条样式 */
-    input[type=range] {
-        flex: 1; -webkit-appearance: none; height: 4px; background: #e0e0e0; border-radius: 2px; outline: none;
-    }
-    input[type=range]::-webkit-slider-thumb {
-        -webkit-appearance: none; width: 16px; height: 16px; background: #fff;
-        border: 2px solid #007bff; border-radius: 50%; cursor: pointer;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    }
-
-    /* 按钮区 */
-    .footer-btns {
-        display: flex; justify-content: flex-end; gap: 10px;
-    }
-    .qq-btn {
-        padding: 8px 24px; border-radius: 4px; font-size: 14px; cursor: pointer; border: 1px solid #ddd;
-    }
+    .footer-btns { display: flex; justify-content: flex-end; gap: 10px; }
+    .qq-btn { padding: 8px 24px; border-radius: 4px; font-size: 14px; cursor: pointer; border: 1px solid #ddd; }
     .qq-btn-cancel { background: #fff; color: #333; }
-    .qq-btn-cancel:hover { background: #f5f5f5; }
     .qq-btn-save { background: #007bff; color: #fff; border-color: #007bff; }
-    .qq-btn-save:hover { background: #0069d9; }
-
   </style>
 </head>
 <body>
 
   <div class="card">
     <h2>新用户注册</h2>
-    
     <div class="avatar-upload" onclick="document.getElementById('fileInput').click()">
         <img id="finalPreview" class="avatar-preview" />
         <span id="uploadText" class="avatar-label">点击<br>上传头像</span>
     </div>
     <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="handleFileSelect(this)" />
-    
     <div id="err" class="err"></div>
-
-    <div class="input-group">
-        <input id="username" class="form-input" placeholder="请输入昵称" />
-    </div>
-    
-    <div class="input-group">
-        <input id="password" type="password" class="form-input" placeholder="设置密码" />
-    </div>
-    
+    <div class="input-group"><input id="username" class="form-input" placeholder="请输入昵称" /></div>
+    <div class="input-group"><input id="password" type="password" class="form-input" placeholder="设置密码" /></div>
     <div class="gender-group">
         <div class="gender-btn" onclick="selectGender('male')" id="btn-male">♂ 男生</div>
         <div class="gender-btn" onclick="selectGender('female')" id="btn-female">♀ 女生</div>
         <div class="gender-btn active" onclick="selectGender('secret')" id="btn-secret">㊙ 保密</div>
     </div>
-    
     <button class="btn-submit" onclick="doRegister()">立即注册</button>
-    
-    <div>
-        <a href="login.html" class="link">已有账号？返回登录</a>
-    </div>
+    <div><a href="login.html" class="link">已有账号？返回登录</a></div>
   </div>
 
   <div id="qqCropperModal" class="qq-modal-overlay">
@@ -189,23 +132,18 @@
               <span>裁剪图片</span>
               <i class="fas fa-times btn-close" onclick="closeCropper()"></i>
           </div>
-          
           <div class="qq-cropper-body">
-              <div>
-                  <img id="imageToCrop" src="" style="max-width: 100%; display: block;">
-              </div>
-              <div class="qq-cropper-mask"></div>
+              <img id="imageToCrop" style="max-width: 100%; display: block;">
           </div>
-          
           <div class="qq-cropper-footer">
               <div class="zoom-control">
-                  <i class="fas fa-minus zoom-icon"></i>
+                  <i class="fas fa-minus zoom-icon" onclick="stepZoom(-0.1)"></i>
                   <input type="range" id="zoomSlider" min="0.1" max="3.0" step="0.01" value="1">
-                  <i class="fas fa-plus zoom-icon"></i>
+                  <i class="fas fa-plus zoom-icon" onclick="stepZoom(0.1)"></i>
               </div>
               <div class="footer-btns">
                   <button class="qq-btn qq-btn-cancel" onclick="closeCropper()">取消</button>
-                  <button class="qq-btn qq-btn-save" onclick="confirmCrop()">保存</button>
+                  <button class="qq-btn qq-btn-save" onclick="confirmCrop()">确定</button>
               </div>
           </div>
       </div>
@@ -226,54 +164,45 @@
         document.getElementById(`btn-${g}`).classList.add('active');
     }
 
-    // ✨ 核心逻辑：初始化 Cropper 并绑定事件
     function handleFileSelect(input) {
         const file = input.files[0];
         if (file) {
             const reader = new FileReader();
             reader.onload = (e) => {
-                // 显示弹窗
                 document.getElementById('qqCropperModal').style.display = 'flex';
                 const image = document.getElementById('imageToCrop');
                 image.src = e.target.result;
                 
                 if (cropper) cropper.destroy();
                 
-                // 重置滑动条
-                zoomSlider.value = 1;
-
-                // 初始化 Cropper (配置项大改)
+                // ✨ 核心配置：完全复刻 QQ 行为
                 cropper = new Cropper(image, {
-                    aspectRatio: 1 / 1,
-                    viewMode: 1,         // 限制图片不留白
-                    dragMode: 'move',    // 允许拖动图片
-                    autoCropArea: 0.8,   // 初始对焦区域
-                    
-                    // ✨ 关闭所有默认 UI，只用它的核心引擎
-                    guides: false,
-                    center: false,
-                    highlight: false,
-                    background: false,   // 关闭网格背景
-                    cropBoxMovable: false,
-                    cropBoxResizable: false,
+                    aspectRatio: 1,      // 1:1 正方形
+                    viewMode: 1,         // ✨ 关键：限制裁剪框永远在图片内（即图片必须填满圆圈）
+                    dragMode: 'move',    // 模式：拖动图片
+                    autoCropArea: 0.6,   // 初始裁剪大小
+                    guides: false,       // 不显示九宫格
+                    center: false,       // 不显示中心十字
+                    highlight: false,    // 不高亮
+                    background: false,   // 不显示网格背景
+                    cropBoxMovable: false,   // 禁止移动圆圈
+                    cropBoxResizable: false, // 禁止改变圆圈大小
                     toggleDragModeOnDblclick: false,
-                    modal: false,        // 关闭默认的黑色遮罩，用我们自己的
                     
-                    ready: function () {
-                        // 初始化完成后，同步滑动条的值
+                    // 初始化后同步滑块位置
+                    ready: function() {
                         const data = cropper.getData();
-                        // 这里简单设置初始值，实际可以根据图片比例计算更精确的初始缩放
-                        zoomSlider.value = 1; 
+                        const imageData = cropper.getImageData();
+                        // 计算当前缩放比例，大概同步给 slider
+                        zoomSlider.value = imageData.width / imageData.naturalWidth;
                     },
                     zoom: function(e) {
-                        // 监听缩放事件（比如鼠标滚轮），同步更新滑动条
-                        // 注意：e.detail.ratio 是新的缩放比例
-                        // 我们需要做一些计算来映射到 slider 的 0.1-3.0 范围，这里简化处理
-                        // zoomSlider.value = e.detail.ratio; // 实际使用需要更复杂的映射算法
+                        // 滚轮缩放时同步滑块
+                        zoomSlider.value = e.detail.ratio;
                     }
                 });
 
-                // ✨ 绑定滑动条事件：滑动时调用 cropper.zoomTo()
+                // 绑定滑块事件
                 zoomSlider.oninput = function() {
                     cropper.zoomTo(parseFloat(this.value));
                 };
@@ -283,16 +212,20 @@
         input.value = '';
     }
 
+    function stepZoom(delta) {
+        if (!cropper) return;
+        cropper.zoom(delta);
+    }
+
     function confirmCrop() {
         if (!cropper) return;
-        // 获取裁剪后的 Canvas (256x256 足够了)
+        // 导出圆形图片（虽然这里导出的还是方形数据，但前端预览和CSS圆角会处理成圆形）
         const canvas = cropper.getCroppedCanvas({
             width: 256, height: 256,
             imageSmoothingEnabled: true, imageSmoothingQuality: 'high',
         });
         avatarBase64 = canvas.toDataURL('image/png');
         
-        // 更新界面预览
         const finalImg = document.getElementById('finalPreview');
         finalImg.src = avatarBase64;
         finalImg.style.display = 'block';
@@ -309,7 +242,6 @@
         }
     }
 
-    // 注册逻辑 (保持不变)
     async function doRegister() {
         const u = document.getElementById("username").value.trim();
         const p = document.getElementById("password").value;
@@ -323,10 +255,7 @@
         btn.disabled = true;
 
         const res = await Dreams.apiPost("/api/register", {
-            username: u,
-            password: p,
-            avatar: avatarBase64,
-            gender: selectedGender
+            username: u, password: p, avatar: avatarBase64, gender: selectedGender
         });
 
         if (res.error) {
