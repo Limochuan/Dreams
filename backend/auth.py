@@ -3,7 +3,6 @@ import secrets
 from typing import Optional, Dict
 from db import get_conn
 
-
 # =========================
 # 内部工具函数：密码处理
 # =========================
@@ -90,6 +89,8 @@ def create_user(username: str, password: str, avatar: Optional[str]) -> int:
                 """,
                 (username, _hash_password(password), avatar),
             )
+            # 务必提交事务（如果未开启 autocommit）
+            conn.commit()
             return cur.lastrowid
     finally:
         conn.close()
@@ -116,6 +117,7 @@ def issue_token(uid: int) -> str:
                 """,
                 (uid, token),
             )
+            conn.commit()
         return token
     finally:
         conn.close()
@@ -154,6 +156,7 @@ def register(username: str, password: str, avatar: Optional[str]) -> Dict:
     2. 检查用户名是否已存在
     3. 创建用户
     4. 签发登录 token
+    5. 【新增】自动加入世界频道 (ID=1)
     """
     if not username or not password:
         raise ValueError("username and password required")
@@ -162,8 +165,24 @@ def register(username: str, password: str, avatar: Optional[str]) -> Dict:
     if existing:
         raise ValueError("username already exists")
 
+    # 1. 创建用户
     uid = create_user(username, password, avatar)
+    
+    # 2. 签发 Token
     token = issue_token(uid)
+
+    # 3. 自动加入世界频道 (Conversation ID = 1)
+    # 使用局部导入，避免 circular import (auth <-> conversations)
+    try:
+        from conversations import add_member
+        # 尝试将用户加入 ID 为 1 的群组
+        # 参数含义：(操作人uid, 群组id, 被拉人uid)
+        # 这里让用户“自己拉自己”进群，或者忽略权限检查
+        add_member(uid, 1, uid)
+        print(f"User {username} (uid={uid}) joined World Channel automatically.")
+    except Exception as e:
+        # 如果自动加群失败（例如还没创建世界频道），不要让注册报错，打印日志即可
+        print(f"Warning: Failed to add user to World Channel: {e}")
 
     return {
         "uid": uid,
@@ -200,6 +219,7 @@ def login(username: str, password: str) -> Dict:
                 "UPDATE dreams_users SET last_login_at=NOW() WHERE id=%s",
                 (uid,)
             )
+            conn.commit()
     finally:
         conn.close()
 
