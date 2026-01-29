@@ -1,17 +1,14 @@
 <!doctype html>
 <html lang="zh">
 <head>
-  <!-- 页面编码与移动端适配 -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
 
-  <!-- 页面标题 -->
   <title>Dreams - Conversations</title>
 
-  <!-- 页面样式，只负责显示 -->
   <style>
     body {
-      font-family: Arial;
+      font-family: Arial, sans-serif;
       background: #f4f4f4;
       padding: 20px;
     }
@@ -57,6 +54,8 @@
       border: 1px solid #ccc;
       border-radius: 8px;
       width: 100%;
+      /* ✨ 修复：防止 padding 撑破布局 */
+      box-sizing: border-box;
     }
 
     button {
@@ -64,6 +63,12 @@
       border: 0;
       border-radius: 8px;
       cursor: pointer;
+      background-color: #007bff;
+      color: white;
+    }
+    
+    button:hover {
+        background-color: #0056b3;
     }
 
     .grid {
@@ -88,13 +93,11 @@
 <body>
   <div class="wrap">
 
-    <!-- 页面顶部：标题 + 退出按钮 -->
     <div class="top">
       <h2>Dreams</h2>
-      <button onclick="logout()">退出</button>
+      <button onclick="logout()" style="background-color: #dc3545;">退出</button>
     </div>
 
-    <!-- 当前登录用户信息 -->
     <div class="card">
       <div class="small">当前账号：</div>
       <div id="me"></div>
@@ -103,7 +106,6 @@
       </div>
     </div>
 
-    <!-- 创建单聊 -->
     <div class="card">
       <h3>创建单聊</h3>
       <div class="small">输入对方 UID（数字）</div>
@@ -114,7 +116,6 @@
       <div id="err_private" class="err"></div>
     </div>
 
-    <!-- 创建群聊 -->
     <div class="card">
       <h3>创建群聊</h3>
       <div class="small">群名</div>
@@ -125,7 +126,6 @@
       <div id="err_group" class="err"></div>
     </div>
 
-    <!-- 会话列表 -->
     <div class="card list">
       <h3>我的会话</h3>
       <div id="list"></div>
@@ -133,7 +133,6 @@
 
   </div>
 
-  <!-- 引入公共 JS：token、API 封装都在这里 -->
   <script src="./app.js"></script>
 
   <script>
@@ -147,7 +146,7 @@
     */
     (async function init() {
 
-      // 调用 /api/me，根据 token 获取当前用户
+      // 调用 /api/me，app.js 会自动带上 token
       me = await Dreams.apiMe();
 
       // 如果没登录，跳回登录页
@@ -172,12 +171,8 @@
       拉取并刷新会话列表
     */
     async function refreshList() {
-      const token = Dreams.getToken();
-
-      // GET /api/conversations
-      const d = await Dreams.apiGet(
-        "/api/conversations?token=" + encodeURIComponent(token)
-      );
+      // ✨ 修改：直接请求 API，不需要手动拼 token
+      const d = await Dreams.apiGet("/api/conversations");
 
       if (d.error) return;
 
@@ -238,10 +233,10 @@
         return showErr("err_private", "请输入正确的 UID（数字）");
       }
 
+      // ✨ 修改：body 不需要传 token
       const d = await Dreams.apiPost(
         "/api/conversations/private",
         {
-          token: Dreams.getToken(),
           peer_uid: peer
         }
       );
@@ -265,10 +260,10 @@
       const title =
         document.getElementById("group_title").value.trim() || "New Group";
 
+      // ✨ 修改：body 不需要传 token
       const d = await Dreams.apiPost(
         "/api/conversations/group",
         {
-          token: Dreams.getToken(),
           title: title
         }
       );
@@ -287,8 +282,8 @@
       退出登录
     */
     function logout() {
-      Dreams.clearToken();
-      location.href = "./login.html";
+      // ✨ 修改：调用新版 app.js 的标准退出方法
+      Dreams.logout();
     }
 
     /*
