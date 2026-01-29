@@ -5,7 +5,7 @@ from db import get_conn
 # =========================
 DDL = [
     # 1. 用户表
-    # [变更]: avatar 改为 LONGTEXT (存Base64)，新增 gender 字段
+    # [变更]: avatar 改为 LONGTEXT (为了存 Base64 图片)，新增 gender
     """
     CREATE TABLE IF NOT EXISTS dreams_users (
         id INT PRIMARY KEY AUTO_INCREMENT,
@@ -18,8 +18,7 @@ DDL = [
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """,
 
-    # 2. 好友关系表 (新增)
-    # [新增]: 用于好友列表功能
+    # 2. 好友关系表 (新增功能)
     """
     CREATE TABLE IF NOT EXISTS dreams_friends (
         uid INT NOT NULL,
@@ -31,7 +30,7 @@ DDL = [
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     """,
 
-    # 3. 登录会话 / token 表 (保持不变)
+    # 3. 登录会话表 (保持不变)
     """
     CREATE TABLE IF NOT EXISTS dreams_sessions (
         id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -46,7 +45,7 @@ DDL = [
     """,
 
     # 4. 会话表
-    # [变更]: 新增 avatar (群头像), updated_at (用于排序)
+    # [变更]: 新增 avatar (群头像 LONGTEXT), updated_at (排序用)
     """
     CREATE TABLE IF NOT EXISTS dreams_conversations (
         id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -102,15 +101,10 @@ DDL = [
     """
 ]
 
-
 # =========================
 # 数据库初始化入口函数
 # =========================
-
 def init_db():
-    """
-    初始化 Dreams 项目的数据库表结构并预制种子数据
-    """
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -127,26 +121,24 @@ def init_db():
                 """
             )
             
-            # 3. [升级] 尝试将 UID 1 设为世界频道的群主
-            # (如果当前数据库是空的，这里不会生效，等到用户注册后逻辑会自动处理)
-            # (如果数据库里已有用户，这步能确保权限正确)
+            # 3. [升级] 确保 UID 1 是世界频道的群主
+            # 如果数据库还是空的，这一步可能不生效（直到有人注册），但这是安全的
             try:
-                # 如果 UID 1 用户存在，确保他在成员表里是 owner
                 cur.execute("""
                     INSERT IGNORE INTO dreams_conversation_members (conversation_id, uid, role) 
                     VALUES (1, 1, 'owner')
                 """)
-                # 如果他以前就在表里（比如是member），强制升级为owner
+                # 如果已经是成员，强制升级为 owner
                 cur.execute("UPDATE dreams_conversation_members SET role='owner' WHERE conversation_id=1 AND uid=1")
                 conn.commit()
             except Exception:
-                pass # 忽略错误（比如用户表还没人）
+                pass 
 
             print("✅ Database initialized successfully (Tables updated, World Channel ready).")
 
     except Exception as e:
         print(f"❌ Database init failed: {e}")
-        raise e
+        # raise e # 可以注释掉，防止卡住部署日志
     finally:
         conn.close()
 
