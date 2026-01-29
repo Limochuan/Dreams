@@ -1,215 +1,380 @@
 <!doctype html>
 <html lang="zh">
 <head>
+  <!-- 页面基础信息 -->
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Dreams - Chat</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dreams Chat</title>
+
+  <!-- 页面样式，仅负责展示，不影响逻辑 -->
   <style>
-    body{font-family:Arial;background:#f4f4f4;padding:20px;}
-    .wrap{max-width:760px;margin:0 auto;}
-    .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
-    .card{background:#fff;border:1px solid #ddd;border-radius:12px;padding:12px;margin-bottom:10px;}
-    #chat{height:360px;overflow-y:auto;border:1px solid #eee;border-radius:10px;padding:10px;background:#fafafa;}
-    .msg{padding:8px;margin-bottom:8px;border-bottom:1px solid #eee;}
-    .meta{font-size:12px;color:#666;margin-bottom:4px;}
-    .grid{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:10px;}
-    input{padding:10px;border:1px solid #ccc;border-radius:8px;width:100%;}
-    button{padding:10px 12px;border:0;border-radius:8px;cursor:pointer;}
-    .small{font-size:12px;color:#666;}
-    .err{color:#b00020;white-space:pre-wrap;margin-top:8px;}
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f4f4f4;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .wrap {
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .card {
+      background: #ffffff;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    #chat {
+      height: 380px;
+      overflow-y: auto;
+      background: #fafafa;
+      border: 1px solid #eee;
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .msg {
+      padding: 8px;
+      border-bottom: 1px solid #eee;
+      margin-bottom: 6px;
+    }
+
+    .meta {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 4px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    input {
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      width: 100%;
+    }
+
+    button {
+      padding: 10px 12px;
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .small {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .err {
+      color: #b00020;
+      white-space: pre-wrap;
+      margin-top: 8px;
+    }
   </style>
 </head>
+
 <body>
   <div class="wrap">
+
+    <!-- 页面顶部 -->
     <div class="top">
       <h2 id="title">Dreams Chat</h2>
-      <div>
-        <button onclick="back()">返回</button>
-      </div>
+      <button onclick="goBack()">返回</button>
     </div>
 
+    <!-- 会话基础信息展示 -->
     <div class="card">
       <div class="small" id="info"></div>
-      <div class="small" id="device"></div>
+      <div class="small" id="wsStatus"></div>
     </div>
 
+    <!-- 群聊管理，仅在 group 时显示 -->
     <div class="card" id="groupOps" style="display:none;">
-      <h3>群管理（简版）</h3>
-      <div class="small">拉人进群：输入对方 UID（数字）</div>
+      <h3>群管理</h3>
+      <div class="small">输入 UID 拉人进群</div>
       <div class="grid">
         <input id="new_uid" placeholder="例如 3" />
-        <button onclick="addMember()">拉进群</button>
+        <button onclick="addMember()">添加</button>
       </div>
       <div id="err_add" class="err"></div>
     </div>
 
+    <!-- 聊天区域 -->
     <div class="card">
       <h3>消息</h3>
+
+      <!-- 消息列表 -->
       <div id="chat"></div>
 
+      <!-- 输入框 -->
       <div class="grid">
         <input id="msg" placeholder="输入消息，回车发送" />
-        <button onclick="send()">发送</button>
+        <button onclick="sendMsg()">发送</button>
       </div>
+
       <div id="err" class="err"></div>
     </div>
   </div>
 
+  <!-- 引入公共 JS（token、api 封装都在这里） -->
   <script src="./app.js"></script>
+
   <script>
-    let me = null;
+    /*
+      ===== 全局变量 =====
+    */
+
+    let me = null;             // 当前登录用户信息
+    let ws = null;             // WebSocket 实例
+
+    // 从 URL 中读取参数
     const cid = parseInt(Dreams.getQueryParam("cid"), 10);
-    const type = Dreams.getQueryParam("type") || "";
+    const type = Dreams.getQueryParam("type"); // private / group
 
-    let ws = null;
 
-    (async () => {
+    /*
+      ===== 页面初始化 =====
+    */
+    (async function init() {
+
+      // 获取当前登录用户
       me = await Dreams.apiMe();
-      if(!me){
+      if (!me) {
         location.href = "./login.html";
         return;
       }
-      if(!cid){
+
+      // 没有会话 ID，返回会话列表
+      if (!cid) {
         location.href = "./conversations.html";
         return;
       }
 
-      document.getElementById("info").innerText = `conversation_id: ${cid} | type: ${type || "unknown"} | my_uid: ${me.uid}`;
-      document.getElementById("title").innerText = `Dreams - #${cid}`;
+      // 显示基本信息
+      document.getElementById("title").innerText = "Dreams - #" + cid;
+      document.getElementById("info").innerText =
+        "conversation_id=" + cid +
+        " | type=" + (type || "unknown") +
+        " | my_uid=" + me.uid;
 
-      if(type === "group"){
+      // 如果是群聊，显示群管理
+      if (type === "group") {
         document.getElementById("groupOps").style.display = "block";
       }
 
-      // 1) 拉历史消息
+      // 加载历史消息
       await loadHistory();
 
-      // 2) 建立 WebSocket
+      // 建立 WebSocket 连接
       connectWS();
 
-      // 回车发送
-      document.getElementById("msg").addEventListener("keydown", (e) => {
-        if(e.key === "Enter") send();
+      // 回车发送消息
+      document.getElementById("msg").addEventListener("keydown", function (e) {
+        if (e.key === "Enter") {
+          sendMsg();
+        }
       });
+
     })();
 
-    async function loadHistory(){
+
+    /*
+      ===== 拉取历史消息 =====
+    */
+    async function loadHistory() {
       const token = Dreams.getToken();
-      const d = await Dreams.apiGet(`/api/conversations/${cid}/messages?token=${encodeURIComponent(token)}&limit=50`);
-      if(d.error){
-        showErr("err", d.error);
+      const res = await Dreams.apiGet(
+        "/api/conversations/" + cid + "/messages?token=" +
+        encodeURIComponent(token) + "&limit=50"
+      );
+
+      if (res.error) {
+        showErr("err", res.error);
         return;
       }
+
       const chat = document.getElementById("chat");
       chat.innerHTML = "";
-      for(const m of (d.items || [])){
+
+      for (const m of res.items || []) {
         appendMessage({
-          type: "message",
           sender_uid: m.sender_uid,
           content: m.content,
           created_at: m.created_at
         });
       }
+
       chat.scrollTop = chat.scrollHeight;
     }
 
-    function connectWS(){
-      const proto = location.protocol === "https:" ? "wss://" : "ws://";
-      const url = proto + location.host + `/ws/${cid}`;
+
+    /*
+      ===== WebSocket 连接 =====
+    */
+    function connectWS() {
+      const protocol = location.protocol === "https:" ? "wss://" : "ws://";
+      const url = protocol + location.host + "/ws/" + cid;
+
       ws = new WebSocket(url);
 
-      ws.onopen = () => {
-        // 第一帧：鉴权
-        ws.send(JSON.stringify({ token: Dreams.getToken() }));
-        document.getElementById("device").innerText = "WebSocket: connected";
+      ws.onopen = function () {
+        // 第一条消息必须发送 token
+        ws.send(JSON.stringify({
+          token: Dreams.getToken()
+        }));
+        document.getElementById("wsStatus").innerText = "WebSocket 已连接";
       };
 
-      ws.onclose = () => {
-        document.getElementById("device").innerText = "WebSocket: closed（5秒后重连）";
+      ws.onclose = function () {
+        document.getElementById("wsStatus").innerText = "WebSocket 已断开，5 秒后重连";
         setTimeout(connectWS, 5000);
       };
 
-      ws.onerror = () => {
-        document.getElementById("device").innerText = "WebSocket: error";
+      ws.onerror = function () {
+        document.getElementById("wsStatus").innerText = "WebSocket 出错";
       };
 
-      ws.onmessage = (e) => {
-        let payload = null;
-        try { payload = JSON.parse(e.data); } catch { return; }
-
-        if(payload.type === "system"){
-          appendSystem(payload);
+      ws.onmessage = function (e) {
+        let data;
+        try {
+          data = JSON.parse(e.data);
+        } catch {
           return;
         }
-        if(payload.type === "message"){
-          appendMessage(payload);
-          return;
+
+        if (data.type === "system") {
+          appendSystem(data);
+        }
+
+        if (data.type === "message") {
+          appendMessage(data);
         }
       };
     }
 
-    function appendSystem(p){
+
+    /*
+      ===== 显示系统消息（进群、离群）=====
+    */
+    function appendSystem(p) {
       const chat = document.getElementById("chat");
       const div = document.createElement("div");
       div.className = "msg";
-      div.innerHTML = `<div class="meta">SYSTEM</div><div>${Dreams.escapeHtml(p.event)} | uid=${p.uid} | device=${p.device || ""}</div>`;
+      div.innerHTML =
+        "<div class='meta'>SYSTEM</div>" +
+        "<div>" + Dreams.escapeHtml(p.event) +
+        " | uid=" + p.uid +
+        " | device=" + (p.device || "") +
+        "</div>";
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
     }
 
-    function appendMessage(p){
+
+    /*
+      ===== 显示普通聊天消息 =====
+    */
+    function appendMessage(p) {
       const chat = document.getElementById("chat");
       const div = document.createElement("div");
       div.className = "msg";
-      const t = p.created_at ? p.created_at : "";
-      const device = p.device ? ` | ${p.device}` : "";
-      div.innerHTML = `
-        <div class="meta">UID ${p.sender_uid}${device} ${Dreams.escapeHtml(t)}</div>
-        <div>${Dreams.escapeHtml(p.content)}</div>
-      `;
+
+      div.innerHTML =
+        "<div class='meta'>UID " + p.sender_uid +
+        " " + (p.created_at || "") +
+        "</div>" +
+        "<div>" + Dreams.escapeHtml(p.content) + "</div>";
+
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
     }
 
-    function send(){
+
+    /*
+      ===== 发送消息 =====
+    */
+    function sendMsg() {
       clearErr("err");
-      const input = document.getElementById("msg");
-      const content = input.value.trim();
-      if(!content) return;
 
-      if(!ws || ws.readyState !== WebSocket.OPEN){
+      const input = document.getElementById("msg");
+      const text = input.value.trim();
+      if (!text) return;
+
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
         showErr("err", "WebSocket 未连接");
         return;
       }
 
-      ws.send(JSON.stringify({ content }));
+      ws.send(JSON.stringify({ content: text }));
       input.value = "";
     }
 
-    async function addMember(){
+
+    /*
+      ===== 群聊添加成员 =====
+    */
+    async function addMember() {
       clearErr("err_add");
-      const newUid = parseInt(document.getElementById("new_uid").value.trim(), 10);
-      if(!newUid || newUid <= 0) return showErr("err_add", "请输入正确的 UID（数字）");
 
-      const d = await Dreams.apiPost(`/api/conversations/${cid}/members`, {
-        token: Dreams.getToken(),
-        new_uid: newUid
-      });
-      if(d.error) return showErr("err_add", d.error);
+      const uid = parseInt(document.getElementById("new_uid").value, 10);
+      if (!uid) {
+        showErr("err_add", "UID 必须是数字");
+        return;
+      }
 
-      document.getElementById("new_uid").value = "";
+      const res = await Dreams.apiPost(
+        "/api/conversations/" + cid + "/members",
+        {
+          token: Dreams.getToken(),
+          new_uid: uid
+        }
+      );
+
+      if (res.error) {
+        showErr("err_add", res.error);
+      } else {
+        document.getElementById("new_uid").value = "";
+      }
     }
 
-    function back(){
+
+    /*
+      ===== 返回会话列表 =====
+    */
+    function goBack() {
       location.href = "./conversations.html";
     }
 
-    function showErr(id, msg){
+
+    /*
+      ===== 错误显示工具 =====
+    */
+    function showErr(id, msg) {
       document.getElementById(id).innerText = msg;
     }
-    function clearErr(id){
+
+    function clearErr(id) {
       document.getElementById(id).innerText = "";
     }
+
   </script>
 </body>
 </html>
