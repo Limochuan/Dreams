@@ -9,16 +9,6 @@ from db import get_conn
 def list_conversations(uid: int) -> List[Dict]:
     """
     获取某个用户参与的所有会话列表
-
-    返回字段：
-    - id: 会话 ID
-    - type: private / group
-    - title: 群聊标题（私聊通常为空）
-    - owner_uid: 群主 uid（私聊通常为空）
-    - created_at: 会话创建时间
-
-    排序规则：
-    - 按会话创建时间倒序
     """
     conn = get_conn()
     try:
@@ -46,7 +36,6 @@ def list_conversations(uid: int) -> List[Dict]:
 def is_member(uid: int, conversation_id: int) -> bool:
     """
     判断某个用户是否是指定会话的成员
-    用于接口鉴权、WebSocket 鉴权等场景
     """
     conn = get_conn()
     try:
@@ -71,12 +60,6 @@ def is_member(uid: int, conversation_id: int) -> bool:
 def create_group(owner_uid: int, title: str) -> int:
     """
     创建一个群聊会话
-
-    规则：
-    - 创建者自动成为 owner
-    - 创建后立即写入会话成员表
-
-    返回新创建的 conversation_id
     """
     conn = get_conn()
     try:
@@ -100,6 +83,10 @@ def create_group(owner_uid: int, title: str) -> int:
                 """,
                 (cid, owner_uid),
             )
+            
+            # [修复] 提交事务！否则数据不会保存
+            conn.commit() 
+            
             return cid
     finally:
         conn.close()
@@ -112,14 +99,6 @@ def create_group(owner_uid: int, title: str) -> int:
 def _find_private_conversation(uid1: int, uid2: int) -> Optional[int]:
     """
     查找是否已经存在 uid1 和 uid2 之间的私聊会话
-
-    逻辑：
-    - 会话类型必须是 private
-    - 两个用户必须同时是该会话的成员
-
-    返回：
-    - 存在则返回 conversation_id
-    - 不存在则返回 None
     """
     conn = get_conn()
     try:
@@ -146,13 +125,6 @@ def _find_private_conversation(uid1: int, uid2: int) -> Optional[int]:
 def create_private(uid1: int, uid2: int) -> int:
     """
     创建私聊会话
-
-    规则：
-    - 不允许和自己创建私聊
-    - 如果两人之间已存在私聊，直接复用
-    - 否则新建 private 会话，并把双方加入成员表
-
-    返回 conversation_id
     """
     if uid1 == uid2:
         raise ValueError("cannot create private conversation with yourself")
@@ -187,6 +159,10 @@ def create_private(uid1: int, uid2: int) -> int:
                 """,
                 (cid, uid2),
             )
+            
+            # [修复] 提交事务！
+            conn.commit()
+            
             return cid
     finally:
         conn.close()
@@ -199,15 +175,11 @@ def create_private(uid1: int, uid2: int) -> int:
 def add_member(requester_uid: int, conversation_id: int, new_uid: int) -> None:
     """
     向指定会话中添加新成员
-
-    当前规则（简化版）：
-    - 只要 requester 是该会话成员，就允许拉人
-    - 不区分 owner / admin / member
-
-    INSERT IGNORE 用于避免重复插入
     """
-    if not is_member(requester_uid, conversation_id):
-        raise PermissionError("not a member")
+    # 这里允许 requester=new_uid (自己拉自己)，用于注册时自动加群逻辑
+    if requester_uid != new_uid:
+        if not is_member(requester_uid, conversation_id):
+            raise PermissionError("not a member")
 
     conn = get_conn()
     try:
@@ -220,5 +192,9 @@ def add_member(requester_uid: int, conversation_id: int, new_uid: int) -> None:
                 """,
                 (conversation_id, new_uid),
             )
+            
+            # [修复] 提交事务！
+            conn.commit()
+            
     finally:
         conn.close()
