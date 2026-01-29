@@ -1,1 +1,83 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Dreams - Login</title>
+  <style>
+    body{font-family:Arial;background:#f4f4f4;padding:20px;}
+    .card{background:#fff;border:1px solid #ddd;border-radius:12px;padding:16px;max-width:420px;margin:0 auto;}
+    input{width:100%;padding:10px;margin:8px 0;border:1px solid #ccc;border-radius:8px;}
+    button{padding:10px 12px;border:0;border-radius:8px;cursor:pointer;width:100%;}
+    .row{display:flex;gap:10px;}
+    .row button{width:50%;}
+    .small{font-size:12px;color:#666;margin-top:8px;}
+    .err{color:#b00020;margin-top:10px;white-space:pre-wrap;}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Dreams</h2>
+    <div class="small">用户名 + 密码登录（首次可注册）</div>
 
+    <input id="username" placeholder="用户名" autocomplete="username" />
+    <input id="password" type="password" placeholder="密码" autocomplete="current-password" />
+    <div class="small">头像（可选）：</div>
+    <input id="avatar" type="file" accept="image/*" />
+
+    <div class="row">
+      <button onclick="doLogin()">登录</button>
+      <button onclick="doRegister()">注册</button>
+    </div>
+
+    <div id="err" class="err"></div>
+  </div>
+
+  <script src="./app.js"></script>
+  <script>
+    // 如果已有 token，直接跳会话列表
+    (async () => {
+      const me = await Dreams.apiMe();
+      if (me) location.href = "./conversations.html";
+    })();
+
+    async function doLogin(){
+      document.getElementById("err").innerText = "";
+      const u = document.getElementById("username").value.trim();
+      const p = document.getElementById("password").value;
+      if(!u || !p){ return showErr("请输入用户名和密码"); }
+
+      const d = await Dreams.apiPost("/api/login", { username:u, password:p });
+      if(d.error) return showErr(d.error);
+
+      Dreams.setToken(d.token);
+      Dreams.setUid(d.uid);
+      location.href = "./conversations.html";
+    }
+
+    async function doRegister(){
+      document.getElementById("err").innerText = "";
+      const u = document.getElementById("username").value.trim();
+      const p = document.getElementById("password").value;
+      if(!u || !p){ return showErr("请输入用户名和密码"); }
+
+      let avatarBase64 = null;
+      const file = document.getElementById("avatar").files[0];
+      if(file){
+        avatarBase64 = await Dreams.fileToBase64(file);
+      }
+
+      const d = await Dreams.apiPost("/api/register", { username:u, password:p, avatar: avatarBase64 });
+      if(d.error) return showErr(d.error);
+
+      Dreams.setToken(d.token);
+      Dreams.setUid(d.uid);
+      location.href = "./conversations.html";
+    }
+
+    function showErr(msg){
+      document.getElementById("err").innerText = msg;
+    }
+  </script>
+</body>
+</html>
