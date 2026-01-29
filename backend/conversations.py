@@ -110,7 +110,7 @@ def list_conversations(uid: int) -> List[Dict]:
     finally:
         conn.close()
 
-# ✨ 必须补充这个函数：更新群信息 (改名/改头像)
+# ✨ 这就是之前缺失的函数：更新群信息 (改名/改头像)
 def update_group_info(operator_uid: int, cid: int, title: str = None, avatar: str = None):
     conn = get_conn()
     try:
@@ -131,7 +131,7 @@ def update_group_info(operator_uid: int, cid: int, title: str = None, avatar: st
     finally:
         conn.close()
 
-# ✨ 必须补充这个函数：移除成员 (踢人)
+# ✨ 这也是之前缺失的函数：移除成员 (踢人)
 def remove_member(operator_uid: int, cid: int, target_uid: int):
     conn = get_conn()
     try:
@@ -168,13 +168,12 @@ def add_member(operator_uid: int, cid: int, new_uid: int):
     try:
         with conn.cursor() as cur:
             # 简单的权限检查：如果是群聊，只有群主或管理员能拉人
-            # (为了世界频道自动加入的兼容性，这里对 ID=1 特殊放行，或者你可以放宽限制)
+            # (为了世界频道自动加入的兼容性，这里对 ID=1 特殊放行)
             if cid != 1:
                 cur.execute("SELECT role FROM dreams_conversation_members WHERE conversation_id=%s AND uid=%s", (cid, operator_uid))
                 row = cur.fetchone()
                 # 如果找不到记录或者只是普通 member，并且不是系统自动操作(uid 1)，则报错
                 if (not row or row["role"] == 'member') and cid != 1:
-                     # 这里可以做个宽松处理：如果希望普通成员也能拉人，就注释掉下面两行
                      # raise PermissionError("只有管理人员可以邀请")
                      pass 
 
