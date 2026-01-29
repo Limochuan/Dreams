@@ -1,6 +1,9 @@
 import json
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
+
 
 from init_db import init_db
 from auth import (
@@ -25,6 +28,26 @@ from ws import ws_manager, detect_device
 # =========================
 
 app = FastAPI(title="Dreams Backend")
+# =========================
+# 前端静态文件挂载
+# =========================
+
+# frontend 目录结构：
+# frontend/
+#   ├─ login.html
+#   ├─ conversations.html
+#   ├─ chat.html
+#   └─ app.js
+
+app.mount(
+    "/",
+    StaticFiles(directory="frontend", html=True),
+    name="frontend"
+)
+
+@app.get("/")
+async def root():
+    return RedirectResponse(url="/login.html")
 
 
 # =========================
