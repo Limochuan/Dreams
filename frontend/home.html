@@ -469,8 +469,9 @@
             if(res.id) {
                 switchTab('chat');
                 const list = await refreshConversations(); // 获取最新列表
-                const target = list.find(c => c.id === res.id); // 找到新群
-                if(target) switchChat(target); // 自动进入
+                // ✨ 修复：使用 String 比较 ID
+                const target = list.find(c => String(c.id) === String(res.id)); 
+                if(target) switchChat(target);
             }
         }
     }
@@ -594,8 +595,8 @@
         if(!res.error) {
             switchTab('chat');
             const list = await refreshConversations(); // 等待列表刷新
-            // 找到刚才创建/获取的会话 ID 并跳转
-            const target = list.find(c => c.id === res.id); 
+            // ✨ 修复：使用 String 比较 ID，防止类型不匹配
+            const target = list.find(c => String(c.id) === String(res.id)); 
             if(target) switchChat(target);
         } else {
             showToast(res.error);
