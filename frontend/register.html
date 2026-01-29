@@ -5,7 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>注册 - Dreams</title>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  
   <style>
+    /* ================= 全局样式 (保持不变) ================= */
     body {
       margin: 0; padding: 0;
       background: linear-gradient(135deg, #eef2f3 0%, #8e9eab 100%);
@@ -19,7 +22,6 @@
     }
     h2 { margin: 0 0 20px 0; color: #333; font-weight: normal; }
     
-    /* 主界面的圆形头像预览 */
     .avatar-upload {
         width: 80px; height: 80px; margin: 0 auto 20px;
         border-radius: 50%; background: #f0f0f0;
@@ -31,14 +33,13 @@
     .avatar-preview { width: 100%; height: 100%; object-fit: cover; display: none; border-radius: 50%; }
     .avatar-label { font-size: 12px; color: #999; }
     
-    /* 输入框样式 */
     .input-group { margin-bottom: 15px; text-align: left; }
-    input {
+    input.form-input {
         width: 100%; padding: 12px; border: 1px solid #ddd;
         border-radius: 8px; box-sizing: border-box; outline: none;
         transition: border 0.2s; font-size: 15px;
     }
-    input:focus { border-color: #007bff; }
+    input.form-input:focus { border-color: #007bff; }
     
     .gender-group { display: flex; gap: 10px; margin-bottom: 20px; }
     .gender-btn {
@@ -61,31 +62,90 @@
     .err { color: #b00020; font-size: 13px; margin-bottom: 10px; min-height: 18px;}
 
     /* =========================================
-       ✨ 核心修复：裁剪弹窗样式
+       ✨ QQ 风格裁剪弹窗 (全新重写)
        ========================================= */
-    .cropper-modal {
+    .qq-modal-overlay {
         display: none;
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        /* ✨ 修改点1：背景改为纯黑，不透明 */
-        background: #000; 
+        background: rgba(0,0,0,0.5); /* 半透明背景遮罩 */
         z-index: 999;
-        flex-direction: column; justify-content: center; align-items: center;
+        justify-content: center; align-items: center;
     }
-    .cropper-wrapper {
-        width: 90%; max-width: 600px; height: 70%; background: #000;
-        overflow: hidden; border-radius: 8px;
-    }
-    #imageToCrop { max-width: 100%; } 
 
-    .cropper-actions {
-        margin-top: 20px; display: flex; gap: 20px;
+    .qq-cropper-box {
+        width: 420px; background: #fff; border-radius: 8px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+        overflow: hidden; display: flex; flex-direction: column;
     }
-    .btn-crop {
-        padding: 10px 30px; border: none; border-radius: 25px;
-        font-size: 16px; cursor: pointer; font-weight: bold;
+
+    /* 1. 标题栏 */
+    .qq-cropper-header {
+        height: 50px; padding: 0 20px;
+        display: flex; justify-content: space-between; align-items: center;
+        border-bottom: 1px solid #eee;
+        font-size: 16px; color: #333;
     }
-    .btn-cancel { background: #fff; color: #333; }
-    .btn-confirm { background: #007bff; color: white; }
+    .btn-close { cursor: pointer; font-size: 20px; color: #999; }
+    .btn-close:hover { color: #333; }
+
+    /* 2. 图片内容区 */
+    .qq-cropper-body {
+        height: 320px; background: #f2f2f2; position: relative;
+        display: flex; justify-content: center; align-items: center;
+        overflow: hidden;
+    }
+    /* 隐藏 Cropper 默认的裁剪框虚线 */
+    .cropper-view-box, .cropper-face {
+        outline: none !important;
+        background: none !important;
+    }
+    
+    /* ✨ 核心魔法：圆形遮罩层 */
+    .qq-cropper-mask {
+        position: absolute;
+        top: 50%; left: 50%;
+        width: 260px; height: 260px; /* 圆形可视区域大小 */
+        transform: translate(-50%, -50%);
+        border-radius: 50%;
+        /* 用一个巨大的半透明阴影来遮挡外部区域 */
+        box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+        pointer-events: none; /* 让鼠标事件穿透它，传递给底下的图片 */
+        z-index: 10;
+        border: 2px solid rgba(255, 255, 255, 0.7); /* 加个白边更像 QQ */
+    }
+
+    /* 3. 底部操作栏 */
+    .qq-cropper-footer {
+        padding: 15px 20px; background: #fff;
+    }
+    
+    /* 缩放控制条 */
+    .zoom-control {
+        display: flex; align-items: center; gap: 15px; color: #666; margin-bottom: 20px;
+    }
+    .zoom-icon { font-size: 18px; }
+    
+    /* 自定义滑动条样式 */
+    input[type=range] {
+        flex: 1; -webkit-appearance: none; height: 4px; background: #e0e0e0; border-radius: 2px; outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+        -webkit-appearance: none; width: 16px; height: 16px; background: #fff;
+        border: 2px solid #007bff; border-radius: 50%; cursor: pointer;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    /* 按钮区 */
+    .footer-btns {
+        display: flex; justify-content: flex-end; gap: 10px;
+    }
+    .qq-btn {
+        padding: 8px 24px; border-radius: 4px; font-size: 14px; cursor: pointer; border: 1px solid #ddd;
+    }
+    .qq-btn-cancel { background: #fff; color: #333; }
+    .qq-btn-cancel:hover { background: #f5f5f5; }
+    .qq-btn-save { background: #007bff; color: #fff; border-color: #007bff; }
+    .qq-btn-save:hover { background: #0069d9; }
 
   </style>
 </head>
@@ -103,11 +163,11 @@
     <div id="err" class="err"></div>
 
     <div class="input-group">
-        <input id="username" placeholder="请输入昵称" />
+        <input id="username" class="form-input" placeholder="请输入昵称" />
     </div>
     
     <div class="input-group">
-        <input id="password" type="password" placeholder="设置密码" />
+        <input id="password" type="password" class="form-input" placeholder="设置密码" />
     </div>
     
     <div class="gender-group">
@@ -123,13 +183,31 @@
     </div>
   </div>
 
-  <div id="cropperModal" class="cropper-modal">
-      <div class="cropper-wrapper">
-          <img id="imageToCrop" src="" alt="Picture">
-      </div>
-      <div class="cropper-actions">
-          <button class="btn-crop btn-cancel" onclick="closeCropper()">取消</button>
-          <button class="btn-crop btn-confirm" onclick="confirmCrop()">确定</button>
+  <div id="qqCropperModal" class="qq-modal-overlay">
+      <div class="qq-cropper-box">
+          <div class="qq-cropper-header">
+              <span>裁剪图片</span>
+              <i class="fas fa-times btn-close" onclick="closeCropper()"></i>
+          </div>
+          
+          <div class="qq-cropper-body">
+              <div>
+                  <img id="imageToCrop" src="" style="max-width: 100%; display: block;">
+              </div>
+              <div class="qq-cropper-mask"></div>
+          </div>
+          
+          <div class="qq-cropper-footer">
+              <div class="zoom-control">
+                  <i class="fas fa-minus zoom-icon"></i>
+                  <input type="range" id="zoomSlider" min="0.1" max="3.0" step="0.01" value="1">
+                  <i class="fas fa-plus zoom-icon"></i>
+              </div>
+              <div class="footer-btns">
+                  <button class="qq-btn qq-btn-cancel" onclick="closeCropper()">取消</button>
+                  <button class="qq-btn qq-btn-save" onclick="confirmCrop()">保存</button>
+              </div>
+          </div>
       </div>
   </div>
 
@@ -140,6 +218,7 @@
     let selectedGender = 'secret';
     let avatarBase64 = null;
     let cropper = null;
+    const zoomSlider = document.getElementById('zoomSlider');
 
     function selectGender(g) {
         selectedGender = g;
@@ -147,32 +226,57 @@
         document.getElementById(`btn-${g}`).classList.add('active');
     }
 
+    // ✨ 核心逻辑：初始化 Cropper 并绑定事件
     function handleFileSelect(input) {
         const file = input.files[0];
         if (file) {
             const reader = new FileReader();
             reader.onload = (e) => {
-                document.getElementById('cropperModal').style.display = 'flex';
+                // 显示弹窗
+                document.getElementById('qqCropperModal').style.display = 'flex';
                 const image = document.getElementById('imageToCrop');
                 image.src = e.target.result;
                 
                 if (cropper) cropper.destroy();
                 
-                // ✨ 修改点2：初始化配置优化
+                // 重置滑动条
+                zoomSlider.value = 1;
+
+                // 初始化 Cropper (配置项大改)
                 cropper = new Cropper(image, {
-                    aspectRatio: 1 / 1, // 强制 1:1 正方形
-                    viewMode: 2,        // ✨ 严格模式：限制裁剪框不能超出图片边界
-                    dragMode: 'move',   // 允许拖动图片来调整位置
-                    autoCropArea: 0.9,  // 初始裁剪区尽量大
-                    restore: false,
-                    guides: false,      // 隐藏辅助线，视觉更干净
+                    aspectRatio: 1 / 1,
+                    viewMode: 1,         // 限制图片不留白
+                    dragMode: 'move',    // 允许拖动图片
+                    autoCropArea: 0.8,   // 初始对焦区域
+                    
+                    // ✨ 关闭所有默认 UI，只用它的核心引擎
+                    guides: false,
                     center: false,
                     highlight: false,
-                    cropBoxMovable: false, // ✨ 禁止移动裁剪框，强制用户拖动图片
-                    cropBoxResizable: true, // 允许缩放裁剪框
+                    background: false,   // 关闭网格背景
+                    cropBoxMovable: false,
+                    cropBoxResizable: false,
                     toggleDragModeOnDblclick: false,
-                    background: false,  // 隐藏网格背景
+                    modal: false,        // 关闭默认的黑色遮罩，用我们自己的
+                    
+                    ready: function () {
+                        // 初始化完成后，同步滑动条的值
+                        const data = cropper.getData();
+                        // 这里简单设置初始值，实际可以根据图片比例计算更精确的初始缩放
+                        zoomSlider.value = 1; 
+                    },
+                    zoom: function(e) {
+                        // 监听缩放事件（比如鼠标滚轮），同步更新滑动条
+                        // 注意：e.detail.ratio 是新的缩放比例
+                        // 我们需要做一些计算来映射到 slider 的 0.1-3.0 范围，这里简化处理
+                        // zoomSlider.value = e.detail.ratio; // 实际使用需要更复杂的映射算法
+                    }
                 });
+
+                // ✨ 绑定滑动条事件：滑动时调用 cropper.zoomTo()
+                zoomSlider.oninput = function() {
+                    cropper.zoomTo(parseFloat(this.value));
+                };
             };
             reader.readAsDataURL(file);
         }
@@ -181,23 +285,31 @@
 
     function confirmCrop() {
         if (!cropper) return;
+        // 获取裁剪后的 Canvas (256x256 足够了)
         const canvas = cropper.getCroppedCanvas({
             width: 256, height: 256,
             imageSmoothingEnabled: true, imageSmoothingQuality: 'high',
         });
         avatarBase64 = canvas.toDataURL('image/png');
         
+        // 更新界面预览
         const finalImg = document.getElementById('finalPreview');
         finalImg.src = avatarBase64;
         finalImg.style.display = 'block';
         document.getElementById('uploadText').style.display = 'none';
+        
         closeCropper();
     }
 
     function closeCropper() {
-        document.getElementById('cropperModal').style.display = 'none';
+        document.getElementById('qqCropperModal').style.display = 'none';
+        if (cropper) {
+            cropper.destroy();
+            cropper = null;
+        }
     }
 
+    // 注册逻辑 (保持不变)
     async function doRegister() {
         const u = document.getElementById("username").value.trim();
         const p = document.getElementById("password").value;
