@@ -7,195 +7,120 @@
 
   <style>
     body {
-      margin: 0;
-      padding: 0;
+      margin: 0; padding: 0;
       background: #f4f4f4;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     }
-
-    .wrap {
-      max-width: 820px;
-      margin: 0 auto;
-      padding: 16px;
-    }
-
-    /* 顶部导航 */
-    .top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-    }
-    .top h2 { margin: 0; }
-
-    /* 通用卡片 */
-    .card {
-      background: #ffffff;
-      border: 1px solid #ddd;
-      border-radius: 12px;
-      padding: 12px;
-      margin-bottom: 12px;
-    }
-
-    /* 聊天窗口主体 */
+    .wrap { max-width: 820px; margin: 0 auto; padding: 16px; }
+    
+    /* 顶部与卡片 */
+    .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .card { background: #fff; border: 1px solid #ddd; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    
+    /* 聊天区域 */
     #chat {
-      height: 480px; 
-      overflow-y: auto;
-      background: #f2f2f2; /* 稍微深一点的灰，衬托气泡 */
-      border: 1px solid #ddd;
-      border-radius: 10px;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px; /* 消息间距 */
+      height: 480px; overflow-y: auto;
+      background: #f2f2f2; border: 1px solid #ddd; border-radius: 10px;
+      padding: 16px; display: flex; flex-direction: column; gap: 16px;
     }
 
-    /* ===========================
-       ✨ 核心消息样式 (Avatar布局)
-       =========================== */
-    
-    /* 每一行消息容器 */
-    .msg-row {
-      display: flex;
-      align-items: flex-start; /* 顶部对齐 */
-      gap: 10px;
-    }
+    /* 消息行 */
+    .msg-row { display: flex; align-items: flex-start; gap: 10px; }
+    .msg-row.me { flex-direction: row-reverse; }
 
-    /* 自己的消息：反向排列 (头像在右) */
-    .msg-row.me {
-      flex-direction: row-reverse;
-    }
-
-    /* 头像样式 */
+    /* 头像 (增加鼠标手势，提示可点击) */
     .avatar {
-      width: 42px;
-      height: 42px;
-      border-radius: 6px; /* 微信风格的小圆角，或者 50% 变圆 */
-      background-color: #ddd;
-      object-fit: cover;
-      flex-shrink: 0;
-      border: 1px solid #ccc;
+      width: 42px; height: 42px; border-radius: 6px;
+      object-fit: cover; flex-shrink: 0; border: 1px solid #ccc;
+      cursor: pointer; /* ✨ 关键：变成小手 */
     }
-    
-    /* 默认头像（如果没有图片时显示的文字方块） */
     .avatar-placeholder {
-      width: 42px;
-      height: 42px;
-      border-radius: 6px;
-      background-color: #17a2b8;
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 16px;
-      font-weight: bold;
-      flex-shrink: 0;
+      width: 42px; height: 42px; border-radius: 6px;
+      background: #17a2b8; color: white; display: flex;
+      align-items: center; justify-content: center;
+      font-weight: bold; flex-shrink: 0; cursor: pointer;
     }
 
-    /* 消息内容包装器 */
-    .msg-content {
-      display: flex;
-      flex-direction: column;
-      max-width: 70%;
-    }
-
-    /* 自己的消息：内容右对齐 */
-    .msg-row.me .msg-content {
-      align-items: flex-end;
-    }
-
-    /* 发送者名字 */
-    .nickname {
-      font-size: 12px;
-      color: #999;
-      margin-bottom: 4px;
-      margin-left: 2px;
-    }
-    .msg-row.me .nickname {
-      margin-right: 2px;
-      text-align: right;
-    }
-
-    /* 气泡样式 */
+    /* 消息内容 */
+    .msg-content { display: flex; flex-direction: column; max-width: 70%; }
+    .msg-row.me .msg-content { align-items: flex-end; }
+    .nickname { font-size: 12px; color: #999; margin-bottom: 4px; margin-left: 2px; }
+    .msg-row.me .nickname { margin-right: 2px; text-align: right; }
+    
+    /* 气泡 */
     .bubble {
-      padding: 10px 14px;
-      background: #fff;
-      border-radius: 6px;
-      font-size: 15px;
-      line-height: 1.5;
-      word-wrap: break-word;
-      position: relative;
-      box-shadow: 0 1px 1px rgba(0,0,0,0.05);
+      padding: 10px 14px; background: #fff; border-radius: 6px;
+      font-size: 15px; line-height: 1.5; word-wrap: break-word;
+      position: relative; box-shadow: 0 1px 1px rgba(0,0,0,0.05);
+    }
+    .bubble::before {
+        content: ""; position: absolute; left: -6px; top: 14px; width: 0; height: 0;
+        border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-right: 6px solid #fff;
+    }
+    .msg-row.me .bubble { background: #95ec69; color: black; }
+    .msg-row.me .bubble::before {
+        left: auto; right: -6px; border-right: none; border-left: 6px solid #95ec69;
+    }
+    .system-msg { align-self: center; background: #dadada; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; margin: 8px 0; }
+
+    /* 输入框 */
+    .input-area { display: flex; gap: 10px; }
+    input { flex: 1; padding: 12px; border: 1px solid #ccc; border-radius: 4px; outline: none; font-size: 16px; box-sizing: border-box; }
+    input:focus { border-color: #95ec69; }
+    button { padding: 0 24px; border: 0; border-radius: 4px; cursor: pointer; background: #95ec69; font-weight: bold; }
+    
+    /* =========================================
+       ✨ 资料卡弹窗 (QQ 风格)
+       ========================================= */
+    .modal-overlay {
+        display: none; /* 默认隐藏 */
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.5); z-index: 1000;
+        justify-content: center; align-items: center;
     }
     
-    /* 气泡小尖角 (左) */
-    .bubble::before {
-        content: "";
-        position: absolute;
-        left: -6px; top: 14px;
-        width: 0; height: 0;
-        border-top: 6px solid transparent;
-        border-bottom: 6px solid transparent;
-        border-right: 6px solid #fff;
+    .profile-card {
+        background: white; width: 320px; border-radius: 16px;
+        overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        animation: popIn 0.3s ease; position: relative;
     }
-
-    /* 自己的气泡：绿色/蓝色 */
-    .msg-row.me .bubble {
-      background: #95ec69; /* 微信绿 */
-      color: black;
+    
+    /* 顶部背景图 */
+    .profile-banner { height: 100px; background: linear-gradient(135deg, #00c6ff, #0072ff); }
+    
+    /* 头像容器 */
+    .profile-avatar-wrap {
+        position: absolute; top: 60px; left: 20px;
+        padding: 4px; background: white; border-radius: 50%;
     }
-
-    /* 气泡小尖角 (右 - 自己的) */
-    .msg-row.me .bubble::before {
-        left: auto; right: -6px;
-        border-right: none;
-        border-left: 6px solid #95ec69;
+    .profile-avatar {
+        width: 70px; height: 70px; border-radius: 50%;
+        object-fit: cover; background: #ddd; display: block;
     }
-
-    /* 系统消息 */
-    .system-msg {
-        align-self: center; /* 居中 */
-        background-color: #dadada;
-        color: white;
-        padding: 4px 10px;
-        border-radius: 4px;
-        font-size: 12px;
-        margin: 8px 0;
+    
+    /* 资料内容 */
+    .profile-info { padding: 40px 20px 20px; margin-top: 10px; }
+    .profile-name { font-size: 22px; font-weight: bold; margin-bottom: 4px; }
+    .profile-meta { font-size: 14px; color: #666; margin-bottom: 16px; display: flex; gap: 10px; align-items: center;}
+    .gender-icon { padding: 2px 6px; border-radius: 4px; font-size: 12px; color: white; }
+    .gender-male { background: #3c9cfe; }
+    .gender-female { background: #ff5ca0; }
+    .gender-secret { background: #aaa; }
+    
+    .profile-row { font-size: 14px; color: #555; margin-bottom: 8px; }
+    .profile-actions { margin-top: 20px; display: flex; gap: 10px; }
+    
+    .btn-action {
+        flex: 1; padding: 10px; border: none; border-radius: 8px;
+        font-weight: bold; cursor: pointer; font-size: 14px;
+        background: #f0f0f0; color: #333;
     }
+    .btn-primary { background: #007bff; color: white; }
+    .btn-primary:hover { background: #0056b3; }
 
-    /* ===========================
-       底部输入框
-       =========================== */
-    .input-area {
-      display: flex;
-      gap: 10px;
-    }
+    @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .close-btn { position: absolute; top: 10px; right: 10px; color: white; font-size: 24px; cursor: pointer; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 
-    input {
-      flex: 1;
-      padding: 12px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      box-sizing: border-box;
-      outline: none;
-      font-size: 16px;
-    }
-    input:focus { border-color: #95ec69; }
-
-    button {
-      padding: 0 24px;
-      border: 0;
-      border-radius: 4px;
-      cursor: pointer;
-      background-color: #95ec69;
-      color: black;
-      font-weight: bold;
-      font-size: 14px;
-    }
-    button:hover { background-color: #89d961; }
-
-    .small { font-size: 12px; color: #666; }
-    .err { color: #b00020; margin-top: 8px; font-size: 12px;}
   </style>
 </head>
 
@@ -203,7 +128,7 @@
   <div class="wrap">
     <div class="top">
       <h2 id="title">Dreams</h2>
-      <button onclick="goBack()" style="background-color: #f2f2f2; color: #333; border: 1px solid #ccc;">&lt; 返回</button>
+      <button onclick="goBack()" style="background: #f2f2f2; color: #333; border: 1px solid #ccc;">&lt; 返回</button>
     </div>
 
     <div class="card" style="padding: 8px 12px; display:flex; justify-content:space-between; align-items:center;">
@@ -211,16 +136,35 @@
       <div class="small" id="wsStatus" style="font-weight:bold;">连接中...</div>
     </div>
 
-    <div id="chat">
-        </div>
+    <div id="chat"></div>
 
     <div class="card">
         <div class="input-area">
             <input id="msg" placeholder="发送消息..." />
             <button onclick="sendMsg()">发送</button>
         </div>
-        <div id="err" class="err"></div>
     </div>
+  </div>
+
+  <div id="modal" class="modal-overlay" onclick="closeProfile(event)">
+      <div class="profile-card" onclick="event.stopPropagation()">
+          <div class="close-btn" onclick="closeProfile(event)">×</div>
+          <div class="profile-banner"></div>
+          <div class="profile-avatar-wrap">
+              <img id="p_avatar" class="profile-avatar" src="" />
+          </div>
+          <div class="profile-info">
+              <div class="profile-name" id="p_username"></div>
+              <div class="profile-meta">
+                  <span id="p_gender" class="gender-icon"></span>
+                  <span id="p_uid"></span>
+              </div>
+              <div class="profile-row">注册时间：<span id="p_date"></span></div>
+              
+              <div class="profile-actions" id="p_actions">
+                  </div>
+          </div>
+      </div>
   </div>
 
   <script src="./app.js"></script>
@@ -249,13 +193,10 @@
 
     async function loadHistory() {
       const res = await Dreams.apiGet(`/api/conversations/${cid}/messages?limit=50`);
-      if (res.error) return showErr("err", res.error);
-      
+      if (res.error) return;
       const chat = document.getElementById("chat");
       chat.innerHTML = ""; 
-      for (const m of res.items || []) {
-        appendMessage(m);
-      }
+      for (const m of res.items || []) appendMessage(m);
       scrollToBottom();
     }
 
@@ -264,16 +205,9 @@
           if (data.type === "system") appendSystem(data);
           if (data.type === "message") appendMessage(data);
       });
-
       if (ws) {
-          ws.addEventListener("open", () => {
-              document.getElementById("wsStatus").innerText = "在线";
-              document.getElementById("wsStatus").style.color = "#28a745";
-          });
-          ws.addEventListener("close", () => {
-              document.getElementById("wsStatus").innerText = "离线";
-              document.getElementById("wsStatus").style.color = "#dc3545";
-          });
+          ws.addEventListener("open", () => document.getElementById("wsStatus").innerText = "在线");
+          ws.addEventListener("close", () => document.getElementById("wsStatus").innerText = "离线");
       }
     }
 
@@ -281,35 +215,30 @@
       const chat = document.getElementById("chat");
       const div = document.createElement("div");
       div.className = "system-msg";
-      div.innerText = `${p.event} (uid ${p.uid})`;
+      div.innerText = `${p.event}`;
       chat.appendChild(div);
       scrollToBottom();
     }
 
-    /* ✨ 渲染逻辑：头像 + 气泡 */
     function appendMessage(p) {
       const chat = document.getElementById("chat");
       const row = document.createElement("div");
-      
-      // 判断是不是我自己发的消息
       const isMe = (me && p.sender_uid === me.uid);
       row.className = isMe ? "msg-row me" : "msg-row";
 
-      // 1. 头像处理
+      // 1. 头像：添加点击事件，传入 UID
       let avatarHtml = "";
-      if (p.sender_avatar) {
-          // 如果有头像，显示图片
-          avatarHtml = `<img class="avatar" src="${p.sender_avatar}" />`;
+      // 处理头像路径
+      const avatarSrc = p.sender_avatar || ""; 
+      
+      if (avatarSrc) {
+          avatarHtml = `<img class="avatar" src="${avatarSrc}" onclick="showProfile(${p.sender_uid})" />`;
       } else {
-          // 没头像，显示首字母
           const label = (p.sender_username || "U").toString().slice(0, 1).toUpperCase();
-          avatarHtml = `<div class="avatar-placeholder">${label}</div>`;
+          avatarHtml = `<div class="avatar-placeholder" onclick="showProfile(${p.sender_uid})">${label}</div>`;
       }
 
-      // 2. 名字处理
       const name = p.sender_username || `UID ${p.sender_uid}`;
-      
-      // 3. 组装 HTML
       row.innerHTML = `
         ${avatarHtml}
         <div class="msg-content">
@@ -317,29 +246,108 @@
             <div class="bubble">${Dreams.escapeHtml(p.content)}</div>
         </div>
       `;
-
       chat.appendChild(row);
       scrollToBottom();
+    }
+
+    /* ==============================
+       ✨ 核心功能：展示资料卡
+       ============================== */
+    async function showProfile(uid) {
+        // 显示加载中...
+        document.getElementById("modal").style.display = "flex";
+        
+        // 调用后端获取详情
+        const res = await Dreams.apiGet(`/api/users/${uid}/profile`);
+        if (res.error) {
+            alert("获取资料失败");
+            document.getElementById("modal").style.display = "none";
+            return;
+        }
+
+        // 填充数据
+        document.getElementById("p_username").innerText = res.username;
+        document.getElementById("p_uid").innerText = `UID: ${res.uid}`;
+        document.getElementById("p_date").innerText = res.created_at;
+        
+        // 头像处理
+        const img = document.getElementById("p_avatar");
+        if (res.avatar) {
+            img.src = res.avatar;
+        } else {
+            // 生成一个简单的默认头像图（或者用 placeholder 逻辑）
+            img.src = "https://via.placeholder.com/150?text=" + res.username.slice(0,1);
+        }
+
+        // 性别处理
+        const genderSpan = document.getElementById("p_gender");
+        const gMap = { 'male': '♂ 男', 'female': '♀ 女', 'secret': '㊙ 保密' };
+        const gClass = { 'male': 'gender-male', 'female': 'gender-female', 'secret': 'gender-secret' };
+        genderSpan.innerText = gMap[res.gender] || '保密';
+        genderSpan.className = 'gender-icon ' + (gClass[res.gender] || 'gender-secret');
+
+        // 按钮逻辑
+        const actionDiv = document.getElementById("p_actions");
+        actionDiv.innerHTML = ""; // 清空旧按钮
+
+        if (res.is_me) {
+            // 如果是自己
+            actionDiv.innerHTML = `<button class="btn-action">这是你自己</button>`;
+        } else if (res.is_friend) {
+            // 已经是好友 -> 发消息
+            const btn = document.createElement("button");
+            btn.className = "btn-action btn-primary";
+            btn.innerText = "发消息";
+            btn.onclick = () => startPrivateChat(res.uid);
+            actionDiv.appendChild(btn);
+        } else {
+            // 不是好友 -> 加好友
+            const btn = document.createElement("button");
+            btn.className = "btn-action btn-primary";
+            btn.innerText = "加为好友";
+            btn.onclick = () => addFriend(res.uid);
+            actionDiv.appendChild(btn);
+        }
+    }
+
+    function closeProfile(e) {
+        document.getElementById("modal").style.display = "none";
+    }
+
+    async function addFriend(uid) {
+        const res = await Dreams.apiPost("/api/friends/add", { friend_uid: uid });
+        if (res.error) {
+            alert(res.error);
+        } else {
+            alert(" 添加好友成功！");
+            // 刷新资料卡状态
+            showProfile(uid);
+        }
+    }
+
+    async function startPrivateChat(uid) {
+        // 创建或获取私聊会话
+        const res = await Dreams.apiPost("/api/conversations/private", { peer_uid: uid });
+        if (!res.error) {
+            // 跳转到私聊页面
+            location.href = `./chat.html?cid=${res.conversation_id}&type=private`;
+        }
     }
 
     function sendMsg() {
       const input = document.getElementById("msg");
       const text = input.value.trim();
       if (!text) return;
-      if (!ws || ws.readyState !== WebSocket.OPEN) return showErr("err", "未连接");
-
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
       ws.send(JSON.stringify({ content: text }));
       input.value = "";
-      document.getElementById("err").innerText = "";
     }
 
     function scrollToBottom() {
         const chat = document.getElementById("chat");
         chat.scrollTop = chat.scrollHeight;
     }
-
     function goBack() { location.href = "./conversations.html"; }
-    function showErr(id, msg) { document.getElementById(id).innerText = msg; }
   </script>
 </body>
 </html>
