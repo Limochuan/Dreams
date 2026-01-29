@@ -12,7 +12,7 @@
       margin: 0; padding: 0; background: #e6e6e6; 
       height: 100vh; display: flex; justify-content: center; align-items: center; overflow: hidden;
       
-      /* ✨✨✨ 修改字体为华文仿宋 ✨✨✨ */
+      /* ✨✨✨ 全局字体：华文仿宋 ✨✨✨ */
       font-family: "STFangsong", "华文仿宋", "Songti SC", "SimSun", "Microsoft YaHei", serif;
     }
     
@@ -64,15 +64,15 @@
     .msg-row.me .msg-bubble-wrap { align-items: flex-end; }
     
     .msg-name { font-size: 12px; color: #999; margin-bottom: 4px; display: flex; align-items: center; }
-    .msg-row.me .msg-name { display: none; } /* 自己不显示名字 */
+    .msg-row.me .msg-name { display: none; }
 
-    /* ✨✨✨ 聊天气泡里的身份标签 ✨✨✨ */
+    /* 身份标签：现在也继承仿宋字体了 */
     .msg-role-badge {
         font-size: 10px; padding: 1px 4px; border-radius: 3px; color: white;
-        margin-left: 6px; transform: scale(0.9); font-family: "Microsoft YaHei", sans-serif; /* 标签还是用黑体清晰点 */
+        margin-left: 6px; transform: scale(0.9); font-family: inherit; font-weight: bold;
     }
-    .role-owner { background: #f0ad4e; } /* 橙色群主 */
-    .role-admin { background: #5bc0de; } /* 蓝色管理 */
+    .role-owner { background: #f0ad4e; } 
+    .role-admin { background: #5bc0de; }
 
     .msg-avatar { width: 36px; height: 36px; border-radius: 50%; cursor: pointer; }
     .bubble { padding: 10px 14px; background: #fff; border-radius: 10px; font-size: 16px; line-height: 1.6; color: #000; box-shadow: 0 1px 2px rgba(0,0,0,0.05); word-break: break-word; }
@@ -98,8 +98,8 @@
     .member-item:hover .btn-kick { display: block; } 
     .m-avatar { width: 24px; height: 24px; border-radius: 50%; margin-right: 8px; }
     .m-name { font-size: 14px; color: #333; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    /* 侧边栏的 Badge */
-    .badge { font-size: 10px; padding: 1px 4px; border-radius: 2px; color: #fff; margin-left: 5px; transform: scale(0.9); font-family: "Microsoft YaHei", sans-serif; }
+    
+    .badge { font-size: 10px; padding: 1px 4px; border-radius: 2px; color: #fff; margin-left: 5px; transform: scale(0.9); font-family: inherit; }
     .badge-owner { background: #f0ad4e; } .badge-admin { background: #5bc0de; }
 
     /* 菜单 & 弹窗 */
@@ -108,8 +108,10 @@
     .ctx-item:hover { background: #f5f5f5; color: #0099ff; }
     .lang-options { display: none; background: #f9f9f9; } .lang-options.show { display: block; }
     .lang-item { padding: 8px 35px; font-size: 13px; color: #666; cursor: pointer; } .lang-item:hover { color: #0099ff; background: #eee; }
+    
     .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 2000; justify-content: center; align-items: center; }
-    .profile-card { background: white; width: 340px; border-radius: 12px; overflow: hidden; box-shadow: 0 15px 40px rgba(0,0,0,0.3); position: relative; font-family: "Microsoft YaHei", sans-serif; /* 资料卡保持黑体 */ }
+    /* ✨ 修复：资料卡现在也是仿宋了 */
+    .profile-card { background: white; width: 340px; border-radius: 12px; overflow: hidden; box-shadow: 0 15px 40px rgba(0,0,0,0.3); position: relative; font-family: inherit; }
     .p-banner { height: 100px; background: linear-gradient(135deg, #00c6ff, #0072ff); }
     .p-close { position: absolute; top: 10px; right: 15px; color: #fff; cursor: pointer; font-size: 20px; }
     .p-avatar-wrap { position: absolute; top: 60px; left: 20px; padding: 4px; background: white; border-radius: 50%; }
@@ -204,7 +206,8 @@
             role_owner: "群主", role_admin: "管理", kick: "移除",
             btn_self: "自己", btn_msg: "发消息", btn_add: "加好友",
             edit_title_prompt: "修改群名称：", confirm_kick: "确定要移除该成员吗？",
-            group_avatar_updated: "群头像已更新", input_uid: "输入用户 UID:"
+            group_avatar_updated: "群头像已更新", input_uid: "输入用户 UID:",
+            user_not_found: "用户不存在"
         },
         id: {
             empty_chat: "Tidak ada obrolan", send_btn: "Kirim", menu_lang: "Bahasa", menu_exit: "Keluar",
@@ -213,7 +216,8 @@
             role_owner: "Pemilik", role_admin: "Admin", kick: "Hapus",
             btn_self: "Anda", btn_msg: "Pesan", btn_add: "Tambah",
             edit_title_prompt: "Ubah Nama Grup:", confirm_kick: "Hapus anggota ini?",
-            group_avatar_updated: "Foto grup diperbarui", input_uid: "Masukkan UID:"
+            group_avatar_updated: "Foto grup diperbarui", input_uid: "Masukkan UID:",
+            user_not_found: "Pengguna tidak ditemukan"
         },
         en: {
             empty_chat: "No chat selected", send_btn: "Send", menu_lang: "Language", menu_exit: "Exit",
@@ -222,7 +226,8 @@
             role_owner: "Owner", role_admin: "Admin", kick: "Kick",
             btn_self: "You", btn_msg: "Message", btn_add: "Add",
             edit_title_prompt: "Edit Group Name:", confirm_kick: "Remove this member?",
-            group_avatar_updated: "Group avatar updated", input_uid: "Enter UID:"
+            group_avatar_updated: "Group avatar updated", input_uid: "Enter UID:",
+            user_not_found: "User not found"
         }
     };
 
@@ -236,7 +241,7 @@
     }
 
     let me, ws, currentCid, currentType, currentRole, ctxCid;
-    let currentGroupMembers = {}; // ✨ 缓存群成员角色，用于在聊天框显示
+    let currentGroupMembers = {}; 
 
     (async function init() {
         setLang(curLang);
@@ -297,10 +302,9 @@
         if(currentRole === 'owner') { titleEl.classList.add("editable"); titleEl.title="Edit Name"; } else { titleEl.classList.remove("editable"); titleEl.title=""; }
         document.getElementById("btnGroupAvatar").style.display = (currentRole==='owner' && c.type==='group') ? 'block' : 'none';
 
-        // ✨ 关键优化：如果是群聊，先加载成员(获取身份)，再渲染消息
         currentGroupMembers = {};
         if(c.type === 'group') {
-            await loadMembers(c.id); // 等待成员列表加载完，populate currentGroupMembers
+            await loadMembers(c.id);
         }
 
         refreshConversations();
@@ -326,11 +330,10 @@
         const canAdd = (currentRole === 'owner' || currentRole === 'admin');
         document.getElementById("btnAddMember").style.display = canAdd ? 'block' : 'none';
 
-        // ✨ 缓存群成员角色，用于 appendMessage
         currentGroupMembers = {}; 
 
         if(res.items) res.items.forEach(u => {
-            currentGroupMembers[u.id] = u.role; // 缓存
+            currentGroupMembers[u.id] = u.role; 
 
             const div = document.createElement("div"); div.className = "member-item";
             div.onclick = () => showProfile(u.id);
@@ -386,7 +389,6 @@
     }
     async function addGroupMember() { if(currentCid){ const u=prompt(translations[curLang].input_uid); if(u)Dreams.apiPost(`/api/conversations/${currentCid}/members`,{new_uid:u}).then(r=>{if(r.error)alert(r.error);else loadMembers(currentCid)}); } }
     
-    // ✨✨ 内置图片转Base64工具
     const fileToBase64 = (file) => new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
@@ -394,7 +396,6 @@
         reader.onerror = error => reject(error);
     });
 
-    // 通用函数
     function appendMessage(msg) {
         const box = document.getElementById("msgBox"); const isMe = (me && msg.sender_uid === me.uid);
         const div = document.createElement("div"); div.className = isMe ? "msg-row me" : "msg-row";
@@ -402,10 +403,8 @@
         if(msg.content.startsWith("[image]")) { const src = msg.content.replace("[image]",""); content = `<img src="${src}" onclick="downloadImg('${src}')">`; }
         const avatar = msg.sender_avatar || `https://ui-avatars.com/api/?background=random&name=${msg.sender_username}`;
         
-        // ✨✨✨ 关键逻辑：生成群主/管理标签 ✨✨✨
         const t = translations[curLang];
         let roleBadge = "";
-        // 只有在群聊中，且不是自己发的消息才显示
         if (currentType === 'group' && !isMe) {
             const role = currentGroupMembers[msg.sender_uid];
             if (role === 'owner') roleBadge = `<span class="msg-role-badge role-owner">${t.role_owner}</span>`;
@@ -432,9 +431,17 @@
     }
     
     function sendMsg() { const i=document.getElementById("msgInput"); const v=i.value.trim(); if(!v||!ws)return; ws.send(JSON.stringify({content:v})); i.value=""; }
+    
     async function showProfile(uid) {
         const res = await Dreams.apiGet(`/api/users/${uid}/profile`);
         const t = translations[curLang];
+        
+        // ✨✨✨ 修复核心：如果查无此人，直接报错返回，不显示弹窗 ✨✨✨
+        if (!res || res.error) {
+            alert(t.user_not_found || "查无此人");
+            return;
+        }
+
         document.getElementById("profileModal").style.display="flex";
         document.getElementById("pName").innerText=res.username; document.getElementById("pUid").innerText="UID: "+res.uid;
         document.getElementById("pAvatar").src=res.avatar||`https://ui-avatars.com/api/?background=random&name=${res.username}`;
