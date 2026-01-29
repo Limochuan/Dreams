@@ -1,5 +1,5 @@
 # Dreams
-Dreams 聊天软件
+Dreams 聊天软件V1.0
 dreams/
 ├── backend/
 │   ├── main.py              # FastAPI 入口
