@@ -31,7 +31,7 @@
     .avatar-preview { width: 100%; height: 100%; object-fit: cover; display: none; border-radius: 50%; }
     .avatar-label { font-size: 12px; color: #999; }
     
-    /* 输入框等样式 (保持不变) */
+    /* 输入框样式 */
     .input-group { margin-bottom: 15px; text-align: left; }
     input {
         width: 100%; padding: 12px; border: 1px solid #ddd;
@@ -61,19 +61,20 @@
     .err { color: #b00020; font-size: 13px; margin-bottom: 10px; min-height: 18px;}
 
     /* =========================================
-       ✨ 新增：裁剪弹窗样式
+       ✨ 核心修复：裁剪弹窗样式
        ========================================= */
     .cropper-modal {
-        display: none; /* 默认隐藏 */
+        display: none;
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.7); z-index: 999;
+        /* ✨ 修改点1：背景改为纯黑，不透明 */
+        background: #000; 
+        z-index: 999;
         flex-direction: column; justify-content: center; align-items: center;
     }
     .cropper-wrapper {
         width: 90%; max-width: 600px; height: 70%; background: #000;
         overflow: hidden; border-radius: 8px;
     }
-    /* 原始图片（用于被 Cropper 接管） */
     #imageToCrop { max-width: 100%; } 
 
     .cropper-actions {
@@ -137,86 +138,66 @@
   
   <script>
     let selectedGender = 'secret';
-    let avatarBase64 = null; // 最终要上传的 Base64
-    let cropper = null;      // Cropper 实例
+    let avatarBase64 = null;
+    let cropper = null;
 
-    // 性别选择
     function selectGender(g) {
         selectedGender = g;
         document.querySelectorAll('.gender-btn').forEach(b => b.classList.remove('active'));
         document.getElementById(`btn-${g}`).classList.add('active');
     }
 
-    // ✨ 1. 用户选择了文件
     function handleFileSelect(input) {
         const file = input.files[0];
         if (file) {
             const reader = new FileReader();
             reader.onload = (e) => {
-                // 显示裁剪弹窗
                 document.getElementById('cropperModal').style.display = 'flex';
-                
-                // 设置要裁剪的图片
                 const image = document.getElementById('imageToCrop');
                 image.src = e.target.result;
                 
-                // 销毁旧的 cropper (如果有)
-                if (cropper) {
-                    cropper.destroy();
-                }
+                if (cropper) cropper.destroy();
                 
-                // 初始化新的 cropper
+                // ✨ 修改点2：初始化配置优化
                 cropper = new Cropper(image, {
-                    aspectRatio: 1 / 1, // ✨ 强制 1:1 比例
-                    viewMode: 1,        // 限制裁剪框在图片内
-                    dragMode: 'move',
-                    autoCropArea: 0.8,
+                    aspectRatio: 1 / 1, // 强制 1:1 正方形
+                    viewMode: 2,        // ✨ 严格模式：限制裁剪框不能超出图片边界
+                    dragMode: 'move',   // 允许拖动图片来调整位置
+                    autoCropArea: 0.9,  // 初始裁剪区尽量大
                     restore: false,
-                    guides: true,
-                    center: true,
+                    guides: false,      // 隐藏辅助线，视觉更干净
+                    center: false,
                     highlight: false,
-                    cropBoxMovable: true,
-                    cropBoxResizable: true,
+                    cropBoxMovable: false, // ✨ 禁止移动裁剪框，强制用户拖动图片
+                    cropBoxResizable: true, // 允许缩放裁剪框
                     toggleDragModeOnDblclick: false,
+                    background: false,  // 隐藏网格背景
                 });
             };
             reader.readAsDataURL(file);
         }
-        // 清空 input，确保下次选同一个文件能触发 onchange
         input.value = '';
     }
 
-    // ✨ 2. 用户点击“确定”裁剪
     function confirmCrop() {
         if (!cropper) return;
-
-        // 获取裁剪后的 Canvas (256x256 足够头像用了)
         const canvas = cropper.getCroppedCanvas({
-            width: 256,
-            height: 256,
-            imageSmoothingEnabled: true,
-            imageSmoothingQuality: 'high',
+            width: 256, height: 256,
+            imageSmoothingEnabled: true, imageSmoothingQuality: 'high',
         });
-
-        // 转成 Base64
         avatarBase64 = canvas.toDataURL('image/png');
         
-        // 更新主界面的预览图
         const finalImg = document.getElementById('finalPreview');
         finalImg.src = avatarBase64;
         finalImg.style.display = 'block';
         document.getElementById('uploadText').style.display = 'none';
-        
-        // 关闭弹窗
         closeCropper();
     }
 
-    // 关闭裁剪弹窗
     function closeCropper() {
         document.getElementById('cropperModal').style.display = 'none';
     }
 
-    // 注册逻辑 (保持不变)
     async function doRegister() {
         const u = document.getElementById("username").value.trim();
         const p = document.getElementById("password").value;
@@ -232,7 +213,7 @@
         const res = await Dreams.apiPost("/api/register", {
             username: u,
             password: p,
-            avatar: avatarBase64, // 这里传的是裁剪后的图片
+            avatar: avatarBase64,
             gender: selectedGender
         });
 
@@ -243,7 +224,7 @@
         } else {
             Dreams.setToken(res.token);
             Dreams.setUid(res.uid);
-            location.href = "./home.html"; // 注册成功跳到新版主页
+            location.href = "./home.html";
         }
     }
   </script>
