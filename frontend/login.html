@@ -7,6 +7,7 @@
   <style>
     body {
       margin: 0; padding: 0;
+      /* 背景色与注册页保持一致风格 */
       background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
       height: 100vh; display: flex; align-items: center; justify-content: center;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
@@ -16,7 +17,6 @@
       border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1);
       text-align: center;
     }
-    /* QQ 风格的大标题 */
     h1 { margin: 0 0 10px; color: #007bff; letter-spacing: 1px; }
     .subtitle { color: #999; font-size: 14px; margin-bottom: 30px; }
     
@@ -24,6 +24,7 @@
       width: 100%; padding: 12px; margin-bottom: 15px;
       border: 1px solid #ddd; border-radius: 8px;
       box-sizing: border-box; outline: none; background: #fafafa;
+      transition: all 0.2s;
     }
     input:focus { border-color: #007bff; background: white; }
     
@@ -32,11 +33,14 @@
       background-color: #007bff; color: white; font-size: 16px;
       cursor: pointer; font-weight: bold; margin-top: 10px;
       box-shadow: 0 4px 10px rgba(0,123,255,0.3);
+      transition: background 0.2s;
     }
     .btn-login:hover { background-color: #0056b3; }
     
     .footer { margin-top: 20px; font-size: 14px; color: #666; }
     .link { color: #007bff; text-decoration: none; cursor: pointer; }
+    .link:hover { text-decoration: underline; }
+    
     .err { color: #b00020; margin-top: 15px; font-size: 13px; min-height: 18px; }
   </style>
 </head>
@@ -60,12 +64,17 @@
   <script src="./app.js"></script>
   <script>
     (async function init() {
+        // 绑定回车键登录
         document.getElementById("password").addEventListener("keydown", (e) => {
             if (e.key === "Enter") doLogin();
         });
+
+        // ✨ 自动检查：如果本地有 Token 且有效，直接去新版主页
         if(localStorage.getItem("dreams_token")) {
             const me = await Dreams.apiMe();
-            if (me) location.href = "./conversations.html";
+            if (me) {
+                location.href = "./home.html"; // 跳转到新版主页
+            }
         }
     })();
 
@@ -85,6 +94,7 @@
         return (err.innerText = "请输入账号和密码");
       }
 
+      // 调用后端登录接口
       const d = await Dreams.apiPost("/api/login", { username: u, password: p });
 
       if (d.error) {
@@ -92,9 +102,12 @@
         return (err.innerText = d.error);
       }
 
+      // 登录成功，保存信息
       Dreams.setToken(d.token);
       Dreams.setUid(d.uid);
-      location.href = "./conversations.html";
+      
+      // ✨ 核心修改：登录成功后跳转到新版主页
+      location.href = "./home.html";
     }
   </script>
 </body>
