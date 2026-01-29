@@ -1,1 +1,25 @@
+<!DOCTYPE html>
+<html>
+<body>
+<h2>Dreams Chat</h2>
 
+<input id="msg">
+<button onclick="send()">发送</button>
+
+<div id="box"></div>
+
+<script>
+const cid = 1 // 示例：某个会话
+const ws = new WebSocket(`wss://${location.host}/ws/${cid}`)
+
+ws.onmessage = e => {
+  box.innerHTML += `<div>${e.data}</div>`
+}
+
+function send(){
+  ws.send(msg.value)
+  msg.value=""
+}
+</script>
+</body>
+</html>
