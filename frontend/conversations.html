@@ -1,39 +1,109 @@
 <!doctype html>
 <html lang="zh">
 <head>
+  <!-- 页面编码与移动端适配 -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+  <!-- 页面标题 -->
   <title>Dreams - Conversations</title>
+
+  <!-- 页面样式，只负责显示 -->
   <style>
-    body{font-family:Arial;background:#f4f4f4;padding:20px;}
-    .wrap{max-width:760px;margin:0 auto;}
-    .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
-    .card{background:#fff;border:1px solid #ddd;border-radius:12px;padding:12px;margin-bottom:10px;}
-    .list .item{padding:10px;border-bottom:1px solid #eee;cursor:pointer;}
-    .list .item:last-child{border-bottom:0;}
-    .badge{font-size:12px;color:#666;margin-left:6px;}
-    input{padding:10px;border:1px solid #ccc;border-radius:8px;width:100%;}
-    button{padding:10px 12px;border:0;border-radius:8px;cursor:pointer;}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-    .small{font-size:12px;color:#666;}
-    .err{color:#b00020;white-space:pre-wrap;margin-top:8px;}
+    body {
+      font-family: Arial;
+      background: #f4f4f4;
+      padding: 20px;
+    }
+
+    .wrap {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+
+    .list .item {
+      padding: 10px;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+    }
+
+    .list .item:last-child {
+      border-bottom: 0;
+    }
+
+    .badge {
+      font-size: 12px;
+      color: #666;
+      margin-left: 6px;
+    }
+
+    input {
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      width: 100%;
+    }
+
+    button {
+      padding: 10px 12px;
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .small {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .err {
+      color: #b00020;
+      white-space: pre-wrap;
+      margin-top: 8px;
+    }
   </style>
 </head>
+
 <body>
   <div class="wrap">
+
+    <!-- 页面顶部：标题 + 退出按钮 -->
     <div class="top">
       <h2>Dreams</h2>
-      <div>
-        <button onclick="logout()">退出</button>
-      </div>
+      <button onclick="logout()">退出</button>
     </div>
 
+    <!-- 当前登录用户信息 -->
     <div class="card">
       <div class="small">当前账号：</div>
       <div id="me"></div>
-      <div class="small" style="margin-top:6px;">Token 存在本地，下次打开自动登录</div>
+      <div class="small" style="margin-top:6px;">
+        Token 保存在浏览器本地，下次打开自动登录
+      </div>
     </div>
 
+    <!-- 创建单聊 -->
     <div class="card">
       <h3>创建单聊</h3>
       <div class="small">输入对方 UID（数字）</div>
@@ -44,6 +114,7 @@
       <div id="err_private" class="err"></div>
     </div>
 
+    <!-- 创建群聊 -->
     <div class="card">
       <h3>创建群聊</h3>
       <div class="small">群名</div>
@@ -54,88 +125,176 @@
       <div id="err_group" class="err"></div>
     </div>
 
+    <!-- 会话列表 -->
     <div class="card list">
       <h3>我的会话</h3>
       <div id="list"></div>
     </div>
+
   </div>
 
+  <!-- 引入公共 JS：token、API 封装都在这里 -->
   <script src="./app.js"></script>
+
   <script>
+    /*
+      全局变量：当前用户信息
+    */
     let me = null;
 
-    (async () => {
+    /*
+      页面加载后立即执行
+    */
+    (async function init() {
+
+      // 调用 /api/me，根据 token 获取当前用户
       me = await Dreams.apiMe();
-      if(!me){
+
+      // 如果没登录，跳回登录页
+      if (!me) {
         location.href = "./login.html";
         return;
       }
-      document.getElementById("me").innerText = `UID: ${me.uid}  |  Username: ${me.username}`;
+
+      // 显示当前用户信息
+      document.getElementById("me").innerText =
+        "UID: " + me.uid + " | Username: " + me.username;
+
+      // 初次加载会话列表
       await refreshList();
-      // 每 5 秒刷新一次（简单版）
+
+      // 每 5 秒刷新一次会话列表（简单轮询）
       setInterval(refreshList, 5000);
+
     })();
 
-    async function refreshList(){
+    /*
+      拉取并刷新会话列表
+    */
+    async function refreshList() {
       const token = Dreams.getToken();
-      const d = await Dreams.apiGet(`/api/conversations?token=${encodeURIComponent(token)}`);
-      if(d.error){
-        return;
-      }
+
+      // GET /api/conversations
+      const d = await Dreams.apiGet(
+        "/api/conversations?token=" + encodeURIComponent(token)
+      );
+
+      if (d.error) return;
+
       const items = d.items || [];
       const list = document.getElementById("list");
       list.innerHTML = "";
 
-      if(items.length === 0){
-        list.innerHTML = `<div class="small">暂无会话。你可以创建单聊或群聊。</div>`;
+      // 没有任何会话
+      if (items.length === 0) {
+        list.innerHTML =
+          "<div class='small'>暂无会话。你可以创建单聊或群聊。</div>";
         return;
       }
 
-      for(const c of items){
+      // 遍历会话列表
+      for (const c of items) {
         const div = document.createElement("div");
         div.className = "item";
-        const t = c.type === "group" ? "群聊" : "单聊";
-        const title = c.title ? c.title : (c.type === "group" ? "未命名群" : `conversation#${c.id}`);
-        div.innerHTML = `${Dreams.escapeHtml(title)} <span class="badge">(${t})</span>`;
-        div.onclick = () => {
-          location.href = `./chat.html?cid=${encodeURIComponent(c.id)}&type=${encodeURIComponent(c.type)}`;
+
+        // 会话类型显示文字
+        const typeText = c.type === "group" ? "群聊" : "单聊";
+
+        // 会话标题逻辑
+        const title = c.title
+          ? c.title
+          : (c.type === "group"
+              ? "未命名群"
+              : "conversation#" + c.id);
+
+        // 会话展示内容
+        div.innerHTML =
+          Dreams.escapeHtml(title) +
+          " <span class='badge'>(" + typeText + ")</span>";
+
+        // 点击跳转到 chat.html
+        div.onclick = function () {
+          location.href =
+            "./chat.html?cid=" + encodeURIComponent(c.id) +
+            "&type=" + encodeURIComponent(c.type);
         };
+
         list.appendChild(div);
       }
     }
 
-    async function createPrivate(){
+    /*
+      创建单聊
+    */
+    async function createPrivate() {
       document.getElementById("err_private").innerText = "";
-      const peer = parseInt(document.getElementById("peer_uid").value.trim(), 10);
-      if(!peer || peer <= 0) return showErr("err_private", "请输入正确的 UID（数字）");
 
-      const d = await Dreams.apiPost("/api/conversations/private", {
-        token: Dreams.getToken(),
-        peer_uid: peer
-      });
-      if(d.error) return showErr("err_private", d.error);
+      const peer = parseInt(
+        document.getElementById("peer_uid").value.trim(),
+        10
+      );
 
-      location.href = `./chat.html?cid=${encodeURIComponent(d.conversation_id)}&type=private`;
+      if (!peer || peer <= 0) {
+        return showErr("err_private", "请输入正确的 UID（数字）");
+      }
+
+      const d = await Dreams.apiPost(
+        "/api/conversations/private",
+        {
+          token: Dreams.getToken(),
+          peer_uid: peer
+        }
+      );
+
+      if (d.error) {
+        return showErr("err_private", d.error);
+      }
+
+      // 创建成功后直接进入聊天页
+      location.href =
+        "./chat.html?cid=" + encodeURIComponent(d.conversation_id) +
+        "&type=private";
     }
 
-    async function createGroup(){
+    /*
+      创建群聊
+    */
+    async function createGroup() {
       document.getElementById("err_group").innerText = "";
-      const title = document.getElementById("group_title").value.trim() || "New Group";
-      const d = await Dreams.apiPost("/api/conversations/group", {
-        token: Dreams.getToken(),
-        title
-      });
-      if(d.error) return showErr("err_group", d.error);
 
-      location.href = `./chat.html?cid=${encodeURIComponent(d.conversation_id)}&type=group`;
+      const title =
+        document.getElementById("group_title").value.trim() || "New Group";
+
+      const d = await Dreams.apiPost(
+        "/api/conversations/group",
+        {
+          token: Dreams.getToken(),
+          title: title
+        }
+      );
+
+      if (d.error) {
+        return showErr("err_group", d.error);
+      }
+
+      // 创建成功直接进入群聊
+      location.href =
+        "./chat.html?cid=" + encodeURIComponent(d.conversation_id) +
+        "&type=group";
     }
 
-    function logout(){
+    /*
+      退出登录
+    */
+    function logout() {
       Dreams.clearToken();
       location.href = "./login.html";
     }
 
-    function showErr(id, msg){
+    /*
+      错误显示工具
+    */
+    function showErr(id, msg) {
       document.getElementById(id).innerText = msg;
     }
   </script>
