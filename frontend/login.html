@@ -2,9 +2,7 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8" />
-
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-
   <title>Dreams - Login</title>
 
   <style>
@@ -31,14 +29,13 @@
       margin: 8px 0;
       border: 1px solid #ccc;
       border-radius: 8px;
-      
-      /* ✨ 核心修复：确保宽度包含 padding 和 border，防止撑破容器 */
+      /* ✨ 核心修复：确保宽度包含 padding 和 border */
       box-sizing: border-box; 
     }
 
     /* 专门优化一下文件上传框的样式 */
     input[type="file"] {
-        padding: 6px; /* 稍微减小内边距 */
+        padding: 6px;
         background: #fafafa;
     }
 
@@ -48,13 +45,20 @@
       border-radius: 8px;
       cursor: pointer;
       width: 100%;
-      background-color: #007bff; /* 加个简单的蓝色背景，看起来更像按钮 */
+      background-color: #007bff;
       color: white;
       font-size: 16px;
+      transition: background 0.2s;
     }
     
     button:hover {
         background-color: #0056b3;
+    }
+
+    /* 禁用状态（加载中） */
+    button:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
     }
 
     .row {
@@ -87,6 +91,7 @@
       white-space: pre-wrap;
       font-size: 14px;
       text-align: center;
+      min-height: 20px; /* 预留位置防止抖动 */
     }
   </style>
 </head>
@@ -121,8 +126,8 @@
     />
 
     <div class="row">
-      <button onclick="doLogin()">登录</button>
-      <button onclick="doRegister()">注册</button>
+      <button id="btnLogin" onclick="doLogin()">登录</button>
+      <button id="btnReg" onclick="doRegister()">注册</button>
     </div>
 
     <div id="err" class="err"></div>
@@ -133,30 +138,34 @@
   <script>
     /*
       页面加载后立即执行
-      如果本地已经有 token，并且 token 有效
-      直接跳转到会话列表页
     */
     (async function autoRedirect() {
-      // 简单判断是否有 token，避免每次刷新都闪烁
-      if(localStorage.getItem("dreams_token")) {
-          const me = await Dreams.apiMe();
-          if (me) {
-            location.href = "./conversations.html";
-          }
-      }
+        // 支持回车登录
+        document.getElementById("password").addEventListener("keydown", (e) => {
+            if (e.key === "Enter") doLogin();
+        });
+
+        // 自动跳转检查
+        if(localStorage.getItem("dreams_token")) {
+            const me = await Dreams.apiMe();
+            if (me) {
+                location.href = "./conversations.html";
+            }
+        }
     })();
 
     /*
       登录逻辑
     */
     async function doLogin() {
+      setLoading(true); // 禁用按钮
       document.getElementById("err").innerText = "";
 
       const u = document.getElementById("username").value.trim();
       const p = document.getElementById("password").value;
 
-      // 简单前端校验
       if (!u || !p) {
+        setLoading(false);
         return showErr("请输入用户名和密码");
       }
 
@@ -167,14 +176,13 @@
       );
 
       if (d.error) {
+        setLoading(false);
         return showErr(d.error);
       }
 
-      // 保存 token 和 uid 到本地
+      // 登录成功
       Dreams.setToken(d.token);
       Dreams.setUid(d.uid);
-
-      // 跳转到会话列表页
       location.href = "./conversations.html";
     }
 
@@ -182,19 +190,18 @@
       注册逻辑
     */
     async function doRegister() {
+      setLoading(true);
       document.getElementById("err").innerText = "";
 
       const u = document.getElementById("username").value.trim();
       const p = document.getElementById("password").value;
 
-      // 简单前端校验
       if (!u || !p) {
+        setLoading(false);
         return showErr("请输入用户名和密码");
       }
 
       let avatarBase64 = null;
-
-      // 如果用户选择了头像，转成 base64
       const file = document.getElementById("avatar").files[0];
       if (file) {
         avatarBase64 = await Dreams.fileToBase64(file);
@@ -211,22 +218,37 @@
       );
 
       if (d.error) {
+        setLoading(false);
         return showErr(d.error);
       }
 
-      // 注册成功后直接保存 token 和 uid
+      // 注册成功
       Dreams.setToken(d.token);
       Dreams.setUid(d.uid);
-
-      // 跳转到会话列表页
       location.href = "./conversations.html";
     }
 
     /*
-      显示错误信息
+      工具函数
     */
     function showErr(msg) {
       document.getElementById("err").innerText = msg;
+    }
+
+    // 控制按钮状态（防止重复点击）
+    function setLoading(isLoading) {
+        const btnLogin = document.getElementById("btnLogin");
+        const btnReg = document.getElementById("btnReg");
+        
+        if (isLoading) {
+            btnLogin.disabled = true;
+            btnReg.disabled = true;
+            btnLogin.innerText = "处理中...";
+        } else {
+            btnLogin.disabled = false;
+            btnReg.disabled = false;
+            btnLogin.innerText = "登录";
+        }
     }
   </script>
 </body>
