@@ -1,12 +1,10 @@
 <!doctype html>
 <html lang="zh">
 <head>
-  <!-- 页面基础信息 -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dreams Chat</title>
 
-  <!-- 页面样式，仅负责展示，不影响逻辑 -->
   <style>
     body {
       margin: 0;
@@ -69,6 +67,8 @@
       border: 1px solid #ccc;
       border-radius: 8px;
       width: 100%;
+      /* ✨ 修复：防止 padding 撑大宽度导致溢出 */
+      box-sizing: border-box;
     }
 
     button {
@@ -76,6 +76,12 @@
       border: 0;
       border-radius: 8px;
       cursor: pointer;
+      background-color: #007bff;
+      color: white;
+    }
+    
+    button:hover {
+        background-color: #0056b3;
     }
 
     .small {
@@ -94,19 +100,16 @@
 <body>
   <div class="wrap">
 
-    <!-- 页面顶部 -->
     <div class="top">
       <h2 id="title">Dreams Chat</h2>
-      <button onclick="goBack()">返回</button>
+      <button onclick="goBack()" style="background-color: #6c757d;">返回</button>
     </div>
 
-    <!-- 会话基础信息展示 -->
     <div class="card">
       <div class="small" id="info"></div>
-      <div class="small" id="wsStatus"></div>
+      <div class="small" id="wsStatus">正在连接...</div>
     </div>
 
-    <!-- 群聊管理，仅在 group 时显示 -->
     <div class="card" id="groupOps" style="display:none;">
       <h3>群管理</h3>
       <div class="small">输入 UID 拉人进群</div>
@@ -117,14 +120,11 @@
       <div id="err_add" class="err"></div>
     </div>
 
-    <!-- 聊天区域 -->
     <div class="card">
       <h3>消息</h3>
 
-      <!-- 消息列表 -->
       <div id="chat"></div>
 
-      <!-- 输入框 -->
       <div class="grid">
         <input id="msg" placeholder="输入消息，回车发送" />
         <button onclick="sendMsg()">发送</button>
@@ -134,7 +134,6 @@
     </div>
   </div>
 
-  <!-- 引入公共 JS（token、api 封装都在这里） -->
   <script src="./app.js"></script>
 
   <script>
@@ -142,8 +141,8 @@
       ===== 全局变量 =====
     */
 
-    let me = null;             // 当前登录用户信息
-    let ws = null;             // WebSocket 实例
+    let me = null;              // 当前登录用户信息
+    let ws = null;              // WebSocket 实例
 
     // 从 URL 中读取参数
     const cid = parseInt(Dreams.getQueryParam("cid"), 10);
@@ -200,10 +199,9 @@
       ===== 拉取历史消息 =====
     */
     async function loadHistory() {
-      const token = Dreams.getToken();
+      // ✨ 修改：直接调用 apiGet，不需要手动拼 token，app.js 会处理
       const res = await Dreams.apiGet(
-        "/api/conversations/" + cid + "/messages?token=" +
-        encodeURIComponent(token) + "&limit=50"
+        "/api/conversations/" + cid + "/messages?limit=50"
       );
 
       if (res.error) {
@@ -227,47 +225,38 @@
 
 
     /*
-      ===== WebSocket 连接 =====
+      ===== WebSocket 连接 (核心修改) =====
     */
     function connectWS() {
-      const protocol = location.protocol === "https:" ? "wss://" : "ws://";
-      const url = protocol + location.host + "/ws/" + cid;
+      // ✨ 修改：使用 app.js 封装的 connectChat，自动处理 URL 签名
+      // 参数 1: 会话 ID
+      // 参数 2: 收到消息的回调函数
+      ws = Dreams.connectChat(cid, (data) => {
+          if (data.type === "system") {
+            appendSystem(data);
+          }
+          if (data.type === "message") {
+            appendMessage(data);
+          }
+      });
 
-      ws = new WebSocket(url);
+      // 绑定 UI 状态更新 (使用 addEventListener 避免覆盖 app.js 内部逻辑)
+      if (ws) {
+          ws.addEventListener("open", () => {
+              document.getElementById("wsStatus").innerText = "WebSocket 已连接";
+              document.getElementById("wsStatus").style.color = "green";
+          });
+          
+          ws.addEventListener("close", () => {
+              document.getElementById("wsStatus").innerText = "WebSocket 已断开";
+              document.getElementById("wsStatus").style.color = "red";
+          });
 
-      ws.onopen = function () {
-        // 第一条消息必须发送 token
-        ws.send(JSON.stringify({
-          token: Dreams.getToken()
-        }));
-        document.getElementById("wsStatus").innerText = "WebSocket 已连接";
-      };
-
-      ws.onclose = function () {
-        document.getElementById("wsStatus").innerText = "WebSocket 已断开，5 秒后重连";
-        setTimeout(connectWS, 5000);
-      };
-
-      ws.onerror = function () {
-        document.getElementById("wsStatus").innerText = "WebSocket 出错";
-      };
-
-      ws.onmessage = function (e) {
-        let data;
-        try {
-          data = JSON.parse(e.data);
-        } catch {
-          return;
-        }
-
-        if (data.type === "system") {
-          appendSystem(data);
-        }
-
-        if (data.type === "message") {
-          appendMessage(data);
-        }
-      };
+          ws.addEventListener("error", () => {
+              document.getElementById("wsStatus").innerText = "WebSocket 出错";
+              document.getElementById("wsStatus").style.color = "red";
+          });
+      }
     }
 
 
@@ -278,11 +267,12 @@
       const chat = document.getElementById("chat");
       const div = document.createElement("div");
       div.className = "msg";
+      div.style.backgroundColor = "#f0f0f0"; // 区分系统消息
       div.innerHTML =
-        "<div class='meta'>SYSTEM</div>" +
-        "<div>" + Dreams.escapeHtml(p.event) +
+        "<div class='meta' style='color:#888'>SYSTEM</div>" +
+        "<div style='font-size:12px; color:#555'>" + Dreams.escapeHtml(p.event) +
         " | uid=" + p.uid +
-        " | device=" + (p.device || "") +
+        " | device=" + (p.device || "unknown") +
         "</div>";
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
@@ -296,6 +286,11 @@
       const chat = document.getElementById("chat");
       const div = document.createElement("div");
       div.className = "msg";
+      
+      // 简单的样式区分：如果是自己发的，背景稍微变色（可选）
+      if (me && p.sender_uid === me.uid) {
+          div.style.backgroundColor = "#e8f5ff";
+      }
 
       div.innerHTML =
         "<div class='meta'>UID " + p.sender_uid +
@@ -323,6 +318,7 @@
         return;
       }
 
+      // 发送消息
       ws.send(JSON.stringify({ content: text }));
       input.value = "";
     }
@@ -340,10 +336,10 @@
         return;
       }
 
+      // ✨ 修改：直接调用 apiPost，body 里不需要传 token
       const res = await Dreams.apiPost(
         "/api/conversations/" + cid + "/members",
         {
-          token: Dreams.getToken(),
           new_uid: uid
         }
       );
@@ -352,6 +348,7 @@
         showErr("err_add", res.error);
       } else {
         document.getElementById("new_uid").value = "";
+        alert("添加成功！");
       }
     }
 
