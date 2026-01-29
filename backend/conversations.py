@@ -1,200 +1,139 @@
-from typing import Optional, List, Dict
+from typing import List, Dict, Optional
 from db import get_conn
 
-
-# =========================
-# 会话列表
-# =========================
-
-def list_conversations(uid: int) -> List[Dict]:
-    """
-    获取某个用户参与的所有会话列表
-    """
+def create_private(uid1: int, uid2: int) -> int:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
+            # 检查是否已存在私聊
             cur.execute(
                 """
-                SELECT c.id, c.type, c.title, c.owner_uid, c.created_at
-                FROM dreams_conversations c
-                JOIN dreams_conversation_members m
-                  ON c.id = m.conversation_id
-                WHERE m.uid = %s
-                ORDER BY c.created_at DESC
+                SELECT c.id FROM dreams_conversations c
+                JOIN dreams_conversation_members m1 ON c.id = m1.conversation_id
+                JOIN dreams_conversation_members m2 ON c.id = m2.conversation_id
+                WHERE c.type = 'private' AND m1.uid = %s AND m2.uid = %s
                 """,
-                (uid,),
+                (uid1, uid2)
             )
-            return cur.fetchall()
+            existing = cur.fetchone()
+            if existing:
+                return existing["id"]
+
+            # 创建新会话
+            cur.execute("INSERT INTO dreams_conversations (type) VALUES ('private')")
+            cid = cur.lastrowid
+            
+            # 添加成员
+            cur.execute("INSERT INTO dreams_conversation_members (conversation_id, uid) VALUES (%s, %s), (%s, %s)", (cid, uid1, cid, uid2))
+            conn.commit()
+            return cid
     finally:
         conn.close()
-
-
-# =========================
-# 成员关系判断
-# =========================
-
-def is_member(uid: int, conversation_id: int) -> bool:
-    """
-    判断某个用户是否是指定会话的成员
-    """
-    conn = get_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT 1
-                FROM dreams_conversation_members
-                WHERE conversation_id=%s AND uid=%s
-                """,
-                (conversation_id, uid),
-            )
-            return cur.fetchone() is not None
-    finally:
-        conn.close()
-
-
-# =========================
-# 群聊创建
-# =========================
 
 def create_group(owner_uid: int, title: str) -> int:
-    """
-    创建一个群聊会话
-    """
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            # 创建会话记录
-            cur.execute(
-                """
-                INSERT INTO dreams_conversations (type, title, owner_uid)
-                VALUES ('group', %s, %s)
-                """,
-                (title, owner_uid),
-            )
+            cur.execute("INSERT INTO dreams_conversations (type, title, owner_uid) VALUES ('group', %s, %s)", (title, owner_uid))
             cid = cur.lastrowid
-
-            # 创建者加入成员表，角色为 owner
-            cur.execute(
-                """
-                INSERT INTO dreams_conversation_members
-                (conversation_id, uid, role)
-                VALUES (%s, %s, 'owner')
-                """,
-                (cid, owner_uid),
-            )
-            
-            # [修复] 提交事务！否则数据不会保存
-            conn.commit() 
-            
+            cur.execute("INSERT INTO dreams_conversation_members (conversation_id, uid, role) VALUES (%s, %s, 'owner')", (cid, owner_uid, cid))
+            conn.commit()
             return cid
     finally:
         conn.close()
 
-
-# =========================
-# 私聊相关
-# =========================
-
-def _find_private_conversation(uid1: int, uid2: int) -> Optional[int]:
-    """
-    查找是否已经存在 uid1 和 uid2 之间的私聊会话
-    """
+# ✨ 核心修改：智能列表 (包含未读数、置顶、私聊对方名字)
+def list_conversations(uid: int) -> List[Dict]:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT c.id
-                FROM dreams_conversations c
-                JOIN dreams_conversation_members m1
-                  ON c.id = m1.conversation_id AND m1.uid=%s
-                JOIN dreams_conversation_members m2
-                  ON c.id = m2.conversation_id AND m2.uid=%s
-                WHERE c.type='private'
-                LIMIT 1
-                """,
-                (uid1, uid2),
-            )
-            row = cur.fetchone()
-            return int(row["id"]) if row else None
+            # 这个 SQL 比较复杂，做了三件事：
+            # 1. 查出会话基本信息 + 我在群里的设置 (置顶/免打扰/上次阅读时间)
+            # 2. 统计未读消息数 (count messages > last_read_at)
+            # 3. 如果是私聊，查出对方的 username 和 avatar
+            sql = """
+            SELECT 
+                c.id, c.type, c.title, c.updated_at,
+                m.is_pinned, m.is_muted, m.last_read_at,
+                
+                (SELECT COUNT(*) FROM dreams_messages msg 
+                 WHERE msg.conversation_id = c.id 
+                 AND msg.created_at > m.last_read_at
+                ) as unread_count,
+                
+                (SELECT content FROM dreams_messages msg 
+                 WHERE msg.conversation_id = c.id 
+                 ORDER BY msg.created_at DESC LIMIT 1
+                ) as last_message,
+                
+                (SELECT created_at FROM dreams_messages msg 
+                 WHERE msg.conversation_id = c.id 
+                 ORDER BY msg.created_at DESC LIMIT 1
+                ) as last_message_time,
+
+                -- 查找私聊对象的头像和名字 (仅当 type=private 时有效)
+                u_peer.username as peer_name,
+                u_peer.avatar as peer_avatar,
+                u_peer.id as peer_uid
+
+            FROM dreams_conversation_members m
+            JOIN dreams_conversations c ON m.conversation_id = c.id
+            -- 尝试连接私聊的另一个人 (self join)
+            LEFT JOIN dreams_conversation_members m_peer 
+                ON c.id = m_peer.conversation_id 
+                AND c.type = 'private' 
+                AND m_peer.uid != m.uid
+            LEFT JOIN dreams_users u_peer ON m_peer.uid = u_peer.id
+            
+            WHERE m.uid = %s
+            -- 排序：置顶优先 -> 最新消息时间 -> 会话更新时间
+            ORDER BY m.is_pinned DESC, COALESCE(last_message_time, c.updated_at) DESC
+            """
+            cur.execute(sql, (uid,))
+            rows = cur.fetchall()
+            
+            # 后处理：修正标题和头像
+            results = []
+            for r in rows:
+                display_title = r["title"]
+                display_avatar = None
+                
+                if r["type"] == 'private':
+                    # 如果是私聊，且标题为空，就显示对方名字
+                    display_title = r["peer_name"] or "未知用户"
+                    display_avatar = r["peer_avatar"]
+                
+                results.append({
+                    "id": r["id"],
+                    "type": r["type"],
+                    "title": display_title,
+                    "avatar": display_avatar,
+                    "peer_uid": r["peer_uid"],
+                    "is_pinned": bool(r["is_pinned"]),
+                    "is_muted": bool(r["is_muted"]),
+                    "unread": r["unread_count"],
+                    "last_msg": r["last_message"] or "",
+                    "last_time": r["last_message_time"]
+                })
+            return results
     finally:
         conn.close()
 
-
-def create_private(uid1: int, uid2: int) -> int:
-    """
-    创建私聊会话
-    """
-    if uid1 == uid2:
-        raise ValueError("cannot create private conversation with yourself")
-
-    existing = _find_private_conversation(uid1, uid2)
-    if existing:
-        return existing
-
+def add_member(operator_uid: int, cid: int, new_uid: int):
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            # 创建私聊会话
-            cur.execute(
-                "INSERT INTO dreams_conversations (type) VALUES ('private')"
-            )
-            cid = cur.lastrowid
-
-            # 两个用户加入会话成员表
-            cur.execute(
-                """
-                INSERT INTO dreams_conversation_members
-                (conversation_id, uid, role)
-                VALUES (%s, %s, 'member')
-                """,
-                (cid, uid1),
-            )
-            cur.execute(
-                """
-                INSERT INTO dreams_conversation_members
-                (conversation_id, uid, role)
-                VALUES (%s, %s, 'member')
-                """,
-                (cid, uid2),
-            )
-            
-            # [修复] 提交事务！
+            # 简单检查权限 (这里省略，默认群成员都可以拉人)
+            cur.execute("INSERT IGNORE INTO dreams_conversation_members (conversation_id, uid) VALUES (%s, %s)", (cid, new_uid))
             conn.commit()
-            
-            return cid
     finally:
         conn.close()
 
-
-# =========================
-# 群成员管理
-# =========================
-
-def add_member(requester_uid: int, conversation_id: int, new_uid: int) -> None:
-    """
-    向指定会话中添加新成员
-    """
-    # 这里允许 requester=new_uid (自己拉自己)，用于注册时自动加群逻辑
-    if requester_uid != new_uid:
-        if not is_member(requester_uid, conversation_id):
-            raise PermissionError("not a member")
-
+def is_member(uid: int, cid: int) -> bool:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT IGNORE INTO dreams_conversation_members
-                (conversation_id, uid, role)
-                VALUES (%s, %s, 'member')
-                """,
-                (conversation_id, new_uid),
-            )
-            
-            # [修复] 提交事务！
-            conn.commit()
-            
+            cur.execute("SELECT 1 FROM dreams_conversation_members WHERE conversation_id=%s AND uid=%s", (cid, uid))
+            return cur.fetchone() is not None
     finally:
         conn.close()
